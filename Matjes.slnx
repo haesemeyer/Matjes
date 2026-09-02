@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="DCAM_interface/DCAM_interface.csproj" Id="a2eb384b-51bf-417a-a6fb-3d7c57d99778" />
   <Project Path="ipp_interface/ipp_interface.csproj" Id="d231c4ae-69f6-4d88-af64-ad1da1d7d114" />
   <Project Path="MatjesImager/MatjesImager.csproj" />
   <Project Path="MatjesUtils/MatjesUtils.csproj" />

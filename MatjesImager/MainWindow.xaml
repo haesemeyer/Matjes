@@ -1,12 +1,13 @@
-﻿<Window x:Class="MatjesImager.MainWindow"
+﻿<Window
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:MatjesImager"
+        xmlns:Views="clr-namespace:MatjesImager.Views" x:Class="MatjesImager.MainWindow"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        Title="MainWindow" Height="745" Width="800">
     <Grid>
-
+        <Views:TestView HorizontalAlignment="Center" Margin="0,74,0,0" VerticalAlignment="Top"/>
     </Grid>
 </Window>

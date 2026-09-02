@@ -17,6 +17,9 @@
 using System;
 using System.Windows.Threading;
 
+#if SILVERLIGHT
+using System.Windows;
+#endif
 
 ////using GalaSoft.Utilities.Attributes;
 
@@ -79,6 +82,12 @@ namespace MatjesUtils
             {
                 return;
             }
+
+#if SILVERLIGHT
+            UIDispatcher = Deployment.Current.Dispatcher;
+#else
+            UIDispatcher = Dispatcher.CurrentDispatcher;
+#endif
         }
     }
 }
