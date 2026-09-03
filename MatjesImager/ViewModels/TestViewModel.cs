@@ -82,6 +82,22 @@ namespace MatjesImager.ViewModels
             get { return string.Format("{0:F2} uM", _piezo_fixed * 45); }
         }
 
+        private int _frameIndex = 0;
+
+        public int FrameIndex
+        {
+            get { return _frameIndex; }
+            set { _frameIndex = value; RaisePropertyChanged(nameof(FrameIndex));  }
+        }
+
+        private double _frameRate = 0;
+
+        public double FrameRate
+        {
+            get { return _frameRate; }
+            set { _frameRate = value; RaisePropertyChanged(nameof(FrameRate)); }
+        }
+
         Image8? _camImage;
 
         private DcamCamera? _camera; // Using our custom P/Invoke wrapper
@@ -233,6 +249,11 @@ namespace MatjesImager.ViewModels
 
         private void AcquisitionLoop(CancellationToken token)
         {
+            FrameIndex = 0;
+            double all_deltas = 0;
+            double delta;
+            double current;
+            double last = -1;
             while (_isAcquiring && !token.IsCancellationRequested)
             {
                 // Using the custom wait method
@@ -242,8 +263,16 @@ namespace MatjesImager.ViewModels
                     _camera.GetTransferInfo(out int frameCount, out int newestFrameIndex);
 
                     DcamNative.DCAMBUF_FRAME frame = _camera.LockFrame(newestFrameIndex);
-
                     ProcessFrame(frame.buf, frame.width, frame.height, frame.rowbytes, token);
+                    FrameIndex++;
+                    current = frame.timestamp_sec + (double)frame.timestamp_microsec / 1000000.0;
+                    if (last > 0)
+                    {
+                        delta = current - last;
+                        all_deltas += delta;   
+                        FrameRate = (double)FrameIndex / all_deltas;
+                    }
+                    last = current;
                 }
                 else
                 {
@@ -259,11 +288,14 @@ namespace MatjesImager.ViewModels
                 _camImage = new Image8(new ipp.IppiSize(width, height));
             }
             ipp.ip.ippiCopy_8u_C1R((byte*)unmanagedBuffer, rowBytes, _camImage.Image, _camImage.Stride, _camImage.Size);
-            try
+            if (FrameIndex % 10 == 0)
             {
-                CamDisplay.Write(_camImage, token.WaitHandle);
+                try
+                {
+                    CamDisplay.Write(_camImage, token.WaitHandle);
+                }
+                catch (OperationCanceledException) { }
             }
-            catch (OperationCanceledException) { }
         }
 
         private void SheetLoop(CancellationToken token)

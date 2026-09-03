@@ -40,6 +40,8 @@
         <Slider x:Name="Piezo_Pos" HorizontalAlignment="Left" Margin="17,241,0,0" VerticalAlignment="Top" Width="33" Orientation="Vertical" Height="104" TickFrequency="0.5" TickPlacement="BottomRight" LargeChange="0.5" IsDirectionReversed="True" Value="{Binding Piezo_Fixed}"/>
         <Label Content="Piezo" HorizontalAlignment="Left" Margin="8,0,0,0" VerticalAlignment="Center"/>
         <Label HorizontalAlignment="Left" Margin="9,343,0,0" VerticalAlignment="Top" RenderTransformOrigin="3.658,1.116" Content="{Binding Pieze_Microns, Mode=OneWay}"/>
+        <Label Content="{Binding FrameIndex}" HorizontalAlignment="Left" Margin="187,424,0,0" VerticalAlignment="Top" Width="74" FontSize="10"/>
+        <Label Content="{Binding FrameRate, ConverterParameter=2, Converter={StaticResource RoundDoubleConverter}}" HorizontalAlignment="Left" Margin="39,424,0,0" VerticalAlignment="Top" FontSize="10" Background="#FFECAB1C" Width="52"/>
 
 
     </Grid>
