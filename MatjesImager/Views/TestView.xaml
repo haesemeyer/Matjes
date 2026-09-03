@@ -15,16 +15,22 @@
     <Utils:WindowAwareView.DataContext>
         <Binding Source="{StaticResource DataSource}" x:Name="ViewModel" x:FieldModifier="public"/>
     </Utils:WindowAwareView.DataContext>
-    <Grid>
+    <Grid Background="Gray">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="263*"/>
             <ColumnDefinition Width="537*"/>
         </Grid.ColumnDefinitions>
         <Utils:EZImage HorizontalAlignment="Left" VerticalAlignment="Center" Height="430" Width="509" Margin="18,0,0,0" Source="{Binding CamDisplay, Mode=OneWay}" Grid.Column="1"/>
-        <Slider x:Name="Sldr_sheet1_left" HorizontalAlignment="Left" Margin="10,78,0,0" VerticalAlignment="Top" Width="120" Minimum="-3" Maximum="0" LargeChange="0.25" SmallChange="0.05" TickFrequency="0.5" TickPlacement="BottomRight" Value="{Binding SheetLeftVolts}" AutoToolTipPlacement="TopLeft"/>
-        <Slider x:Name="Sldr_sheet1_right" HorizontalAlignment="Left" Margin="133,78,0,0" VerticalAlignment="Top" Width="120" Maximum="3" LargeChange="0.25" SmallChange="0.05" TickFrequency="0.5" TickPlacement="BottomRight" Value="{Binding SheetRightVolts}" AutoToolTipPlacement="TopLeft"/>
-        <Label HorizontalAlignment="Left" Margin="17,52,0,0" VerticalAlignment="Top" Content="{Binding SheetLeftVolts, ConverterParameter=2, Converter={StaticResource RoundDoubleConverter}}"/>
-        <Label HorizontalAlignment="Left" Margin="214,52,0,0" VerticalAlignment="Top" Content="{Binding SheetRightVolts, ConverterParameter=2, Converter={StaticResource RoundDoubleConverter}}"/>
+        <Slider x:Name="Sldr_sheet1_left" HorizontalAlignment="Left" Margin="10,78,0,0" VerticalAlignment="Top" Width="120" Minimum="-3" Maximum="0" LargeChange="0.25" SmallChange="0.05" TickFrequency="0.5" TickPlacement="BottomRight" Value="{Binding Sheet1LeftVolts}" AutoToolTipPlacement="TopLeft"/>
+        <Slider x:Name="Sldr_sheet1_right" HorizontalAlignment="Left" Margin="133,78,0,0" VerticalAlignment="Top" Width="120" Maximum="3" LargeChange="0.25" SmallChange="0.05" TickFrequency="0.5" TickPlacement="BottomRight" Value="{Binding Sheet1RightVolts}" AutoToolTipPlacement="TopLeft"/>
+        <Label HorizontalAlignment="Left" Margin="17,52,0,0" VerticalAlignment="Top" Content="{Binding Sheet1LeftVolts, ConverterParameter=2, Converter={StaticResource RoundDoubleConverter}}"/>
+        <Label HorizontalAlignment="Left" Margin="214,52,0,0" VerticalAlignment="Top" Content="{Binding Sheet1RightVolts, ConverterParameter=2, Converter={StaticResource RoundDoubleConverter}}"/>
+        <Label Content="Sheet 1" HorizontalAlignment="Left" Margin="17,26,0,0" VerticalAlignment="Top"/>
+        <Slider x:Name="Sldr_sheet2_left" HorizontalAlignment="Left" Margin="52,171,0,0" VerticalAlignment="Top" Width="78" Minimum="-1" Maximum="0" LargeChange="0.25" SmallChange="0.05" TickFrequency="0.5" TickPlacement="BottomRight" Value="{Binding Sheet2LeftVolts}" AutoToolTipPlacement="TopLeft"/>
+        <Slider x:Name="Sldr_sheet2_right" HorizontalAlignment="Left" Margin="133,171,0,0" VerticalAlignment="Top" Width="75" Maximum="1" LargeChange="0.25" SmallChange="0.05" TickFrequency="0.5" TickPlacement="BottomRight" Value="{Binding Sheet2RightVolts}" AutoToolTipPlacement="TopLeft"/>
+        <Label HorizontalAlignment="Left" Margin="58,145,0,0" VerticalAlignment="Top" Content="{Binding Sheet2LeftVolts, ConverterParameter=2, Converter={StaticResource RoundDoubleConverter}}"/>
+        <Label HorizontalAlignment="Left" Margin="169,145,0,0" VerticalAlignment="Top" Content="{Binding Sheet2RightVolts, ConverterParameter=2, Converter={StaticResource RoundDoubleConverter}}"/>
+        <Label Content="Sheet 2" HorizontalAlignment="Left" Margin="17,119,0,0" VerticalAlignment="Top"/>
 
 
     </Grid>

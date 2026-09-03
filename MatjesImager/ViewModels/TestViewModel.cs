@@ -21,20 +21,36 @@ namespace MatjesImager.ViewModels
             get { return _camDisplay; }
         }
 
-        private double _sheetLeftVolts;
+        private double _sheet1LeftVolts;
 
-        public double SheetLeftVolts
+        public double Sheet1LeftVolts
         {
-            get { return _sheetLeftVolts;}
-            set { _sheetLeftVolts = value; RaisePropertyChanged(nameof(SheetLeftVolts)); }
+            get { return _sheet1LeftVolts; }
+            set { _sheet1LeftVolts = value; RaisePropertyChanged(nameof(Sheet1LeftVolts)); }
         }
 
-        private double _sheetRightVolts;
+        private double _sheet1RightVolts;
 
-        public double SheetRightVolts
+        public double Sheet1RightVolts
         {
-            get { return _sheetRightVolts; }
-            set { _sheetRightVolts = value; RaisePropertyChanged(nameof(SheetRightVolts)); }
+            get { return _sheet1RightVolts; }
+            set { _sheet1RightVolts = value; RaisePropertyChanged(nameof(Sheet1RightVolts)); }
+        }
+
+        private double _sheet2LeftVolts;
+
+        public double Sheet2LeftVolts
+        {
+            get { return _sheet2LeftVolts; }
+            set { _sheet2LeftVolts = value; RaisePropertyChanged(nameof(Sheet2LeftVolts)); }
+        }
+
+        private double _sheet2RightVolts;
+
+        public double Sheet2RightVolts
+        {
+            get { return _sheet2RightVolts; }
+            set { _sheet2RightVolts = value; RaisePropertyChanged(nameof(Sheet2RightVolts)); }
         }
 
         Image8? _camImage;
@@ -55,8 +71,10 @@ namespace MatjesImager.ViewModels
         private int _sweepsPerFrame = 2;
 
         public TestViewModel() {
-            SheetLeftVolts = -1;
-            SheetRightVolts = 1;
+            Sheet1LeftVolts = -1;
+            Sheet1RightVolts = 1;
+            Sheet2LeftVolts = -0.5;
+            Sheet2RightVolts = 0.5;
             if (IsInDesignMode)
                 return;
             _camDisplay = new EZImageSource();
@@ -85,7 +103,7 @@ namespace MatjesImager.ViewModels
                 _aoTask_sheet.AOChannels.CreateVoltageChannel(_aoChannel1, "Mirror2", -5, 5, AOVoltageUnits.Volts);
 
                 double aoSampleRate = frameRateHz * _samplesPerFrame;
-                double[,] waveformBuffer = GenerateTriangleBuffer(_samplesPerFrame, _sweepsPerFrame, _sheetLeftVolts, _sheetRightVolts);
+                double[,] waveformBuffer = GenerateTriangleBuffer(_samplesPerFrame, _sweepsPerFrame, Sheet1LeftVolts, Sheet1RightVolts, Sheet2LeftVolts, Sheet2RightVolts);
 
                 _aoTask_sheet.Timing.ConfigureSampleClock("", aoSampleRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, _samplesPerFrame);
                 _aoTask_sheet.Triggers.StartTrigger.ConfigureDigitalEdgeTrigger($"/Dev1/ctr0InternalOutput", DigitalEdgeStartTriggerEdge.Rising);
@@ -123,21 +141,24 @@ namespace MatjesImager.ViewModels
             }
         }
 
-        private double[,] GenerateTriangleBuffer(int totalSamples, int cycles, double vMin, double vMax)
+        private double[,] GenerateTriangleBuffer(int totalSamples, int cycles, double vMin1, double vMax1, double vMin2, double vMax2)
         {
             double[,] buffer = new double[2, totalSamples];
             int samplesPerCycle = totalSamples / cycles;
+            double voltage;
 
             for (int i = 0; i < totalSamples; i++)
             {
                 int cycleSample = i % samplesPerCycle;
                 double phase = (double)cycleSample / samplesPerCycle;
 
-                double voltage = phase < 0.5
-                    ? vMin + (vMax - vMin) * (phase * 2.0)
-                    : vMax - (vMax - vMin) * ((phase - 0.5) * 2.0);
-
+                voltage = phase < 0.5
+                    ? vMin1 + (vMax1 - vMin1) * (phase * 2.0)
+                    : vMax1 - (vMax1 - vMin1) * ((phase - 0.5) * 2.0);
                 buffer[0, i] = voltage;
+                voltage = phase < 0.5
+                    ? vMin2 + (vMax2 - vMin2) * (phase * 2.0)
+                    : vMax2 - (vMax2 - vMin2) * ((phase - 0.5) * 2.0);
                 buffer[1, i] = voltage;
             }
             return buffer;
@@ -184,7 +205,7 @@ namespace MatjesImager.ViewModels
             double[,] waveformBuffer;
             while(_isAcquiring && !token.IsCancellationRequested)
             {
-                waveformBuffer = GenerateTriangleBuffer(_samplesPerFrame, _sweepsPerFrame, SheetLeftVolts, SheetRightVolts);
+                waveformBuffer = GenerateTriangleBuffer(_samplesPerFrame, _sweepsPerFrame, Sheet1LeftVolts, Sheet1RightVolts, Sheet2LeftVolts, Sheet2RightVolts);
                 AnalogMultiChannelWriter aoWriter = new AnalogMultiChannelWriter(_aoTask_sheet.Stream);
                 aoWriter.WriteMultiSample(false, waveformBuffer);
                 Thread.Sleep(100);
