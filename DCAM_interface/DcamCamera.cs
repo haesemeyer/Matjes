@@ -121,8 +121,8 @@ namespace Hamamatsu.Dcam
         /// </summary>
         public void SetROI(int xOffset, int yOffset, int width, int height)
         {
-            // 1. Enable Subarray mode (2 = ON)
-            SetProperty(DcamNative.DCAM_IDPROP_SUBARRAYMODE, 2.0);
+            // 1. Enable Subarray mode
+            SetProperty(DcamNative.DCAM_IDPROP_SUBARRAYMODE, DcamNative.DCAMPROP_MODE__ON);
 
             // 2. Set dimensions first (preventing out-of-bounds errors with current positions)
             SetProperty(DcamNative.DCAM_IDPROP_SUBARRAYHSIZE, width);
@@ -138,8 +138,7 @@ namespace Hamamatsu.Dcam
         /// </summary>
         public void DisableROI()
         {
-            // 1 = OFF
-            SetProperty(DcamNative.DCAM_IDPROP_SUBARRAYMODE, 1.0);
+            SetProperty(DcamNative.DCAM_IDPROP_SUBARRAYMODE, DcamNative.DCAMPROP_MODE__OFF);
         }
 
         /// <summary>

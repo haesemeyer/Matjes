@@ -197,11 +197,11 @@ namespace Hamamatsu.Native
         public const int DCAM_IDPROP_BINNING = 0x00401110;
 
         // Region of Interest (Subarray)
-        public const int DCAM_IDPROP_SUBARRAYMODE = 0x00402110; // 1: OFF, 2: ON
-        public const int DCAM_IDPROP_SUBARRAYHPOS = 0x04108110; // Horizontal start pixel
-        public const int DCAM_IDPROP_SUBARRAYVPOS = 0x04108120; // Vertical start pixel
-        public const int DCAM_IDPROP_SUBARRAYHSIZE = 0x04108210; // Width
-        public const int DCAM_IDPROP_SUBARRAYVSIZE = 0x04108220; // Height
+        public const int DCAM_IDPROP_SUBARRAYHPOS = 0x00402110; /* R/W, long,	"SUBARRAY HPOS"			*/
+        public const int DCAM_IDPROP_SUBARRAYHSIZE = 0x00402120;    /* R/W, long,	"SUBARRAY HSIZE"		*/
+        public const int DCAM_IDPROP_SUBARRAYVPOS = 0x00402130; /* R/W, long,	"SUBARRAY VPOS"			*/
+        public const int DCAM_IDPROP_SUBARRAYVSIZE = 0x00402140;    /* R/W, long,	"SUBARRAY VSIZE"		*/
+        public const int DCAM_IDPROP_SUBARRAYMODE = 0x00402150;	/* R/W, mode,	"SUBARRAY MODE"			*/
 
         // Bit Depth and pixel type (mutually exclusive, shoudl use pixel-type on Fusion)
         public const int DCAM_IDPROP_BITSPERCHANNEL = 0x00420130;
@@ -209,6 +209,10 @@ namespace Hamamatsu.Native
 
         // Readout speed
         public const int DCAM_IDPROP_READOUTSPEED = 0x00400110;
+
+        // ON OFF Mode values
+        public const int DCAMPROP_MODE__OFF = 1;          /*	"OFF"					*/
+        public const int DCAMPROP_MODE__ON = 2;	
 
         [StructLayout(LayoutKind.Sequential)]
         public struct DCAMAPI_INIT

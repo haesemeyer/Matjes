@@ -146,9 +146,11 @@ namespace MatjesImager.ViewModels
 
                 _camera.SetPixelType(DcamNative.DCAM_PIXELTYPE.DCAM_PIXELTYPE_MONO8);
                 _camera.SetReadoutSpeed(DcamNative.DCAM_READOUT_SPEED.DCAMPROP_READOUT_SPEED_FAST);
+                _camera.SetROI(xOffset: 0, yOffset: 160, width: 2304, height: 2048);
 
                 // 2. Configure Camera hardware trigger
-                double exposureTime = (1.0 / frameRateHz) - 0.002;
+                double exposureTime = (1.0 / frameRateHz);
+                exposureTime -= exposureTime * 0.1;  // shorten 10% to give time for readout; might need to adjust this fraction
                 
                 //TODO: Change back to re-activate hardware trigger!
                 //_camera.ConfigureHardwareTrigger(exposureTime);
@@ -347,29 +349,5 @@ namespace MatjesImager.ViewModels
             StopAcquisition();
             Cleanup();
         }
-
-        /*public void StartConfiguredAcquisition()
-        {
-            _camera = new DcamCamera(0);
-
-            // 1. Setup Camera Geometry & Bit Depth
-            _camera.SetBitDepth(16);          // 16-bit output
-            _camera.SetBinning(2);            // 2x2 Binning (cuts resolution in half, increases speed/SNR)
-
-            // Set a 1024x1024 ROI centered on the binned sensor space
-            _camera.SetROI(xOffset: 512, yOffset: 512, width: 1024, height: 1024);
-
-            // 2. Setup Triggers (Using the previous hardware sync setup)
-            _camera.ConfigureHardwareTrigger(0.008); // 8ms exposure
-
-            // 3. Allocate buffers based on the new geometry sizes
-            // (If you allocate before setting ROI/Binning, the buffers will be the wrong size and cap_start will fail)
-            _camera.AllocateBuffer(10);
-
-            // 4. Start Capture
-            _camera.StartCapture(DcamNative.DCAMCAP_START.SEQUENCE);
-
-            // ... begin waiting/trigger loop ...
-        }*/
     }
     }
