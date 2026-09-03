@@ -14,8 +14,8 @@
     <Utils:WindowAwareView.DataContext>
         <Binding Source="{StaticResource DataSource}" x:Name="ViewModel" x:FieldModifier="public"/>
     </Utils:WindowAwareView.DataContext>
-    <Grid>
-        <Utils:EZImage HorizontalAlignment="Left" VerticalAlignment="Center" Height="430" Width="509" Margin="281,0,0,0" ItemsSource="{Binding CamDisplay, Mode=OneWay}"/>
+    <Grid Background="#FF4A4747">
+        <Utils:EZImage HorizontalAlignment="Left" VerticalAlignment="Center" Height="430" Width="509" Margin="281,0,0,0" Source="{Binding CamDisplay, Mode=OneWay}"/>
 
 
     </Grid>

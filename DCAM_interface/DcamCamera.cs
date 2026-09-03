@@ -88,10 +88,21 @@ namespace Hamamatsu.Dcam
             SetProperty(DcamNative.DCAM_IDPROP_EXPOSURETIME, exposureTimeSec);
 
             // 1 = Internal, 2 = External. Set to External for Hardware Sync.
-            SetProperty(DcamNative.DCAM_IDPROP_TRIGGERSOURCE, 2);
+            SetProperty(DcamNative.DCAM_IDPROP_TRIGGERSOURCE, (int)DcamNative.DCAM_TRIGGERSOURCE.DCAMPROP_TRIGGERSOURCE__EXTERNAL);
 
             // 1 = Edge, 2 = Level, 3 = Synchronous Readout
-            SetProperty(DcamNative.DCAM_IDPROP_TRIGGERACTIVE, 1);
+            SetProperty(DcamNative.DCAM_IDPROP_TRIGGERACTIVE, (int)DcamNative.DCAM_TRIGGERACTIVE.DCAMPROP_TRIGGERACTIVE__EDGE);
+        }
+
+        public void ConfigureInternalTrigger(double exposureTimeSec)
+        {
+            SetProperty(DcamNative.DCAM_IDPROP_EXPOSURETIME, exposureTimeSec);
+
+            // 1 = Internal, 2 = External. Set to External for Hardware Sync.
+            SetProperty(DcamNative.DCAM_IDPROP_TRIGGERSOURCE, (int)DcamNative.DCAM_TRIGGERSOURCE.DCAMPROP_TRIGGERSOURCE__INTERNAL);
+
+            // 1 = Edge, 2 = Level, 3 = Synchronous Readout
+            SetProperty(DcamNative.DCAM_IDPROP_TRIGGERACTIVE, (int)DcamNative.DCAM_TRIGGERACTIVE.DCAMPROP_TRIGGERACTIVE__EDGE);
         }
 
         /// <summary>
@@ -138,6 +149,11 @@ namespace Hamamatsu.Dcam
         public void SetBitDepth(int bitDepth)
         {
             SetProperty(DcamNative.DCAM_IDPROP_BITSPERCHANNEL, bitDepth);
+        }
+
+        public void SetPixelType(DcamNative.DCAM_PIXELTYPE pixel_type)
+        {
+            SetProperty(DcamNative.DCAM_IDPROP_IMAGE_PIXELTYPE, (int)pixel_type);
         }
 
         // --- Capture & Sync ---

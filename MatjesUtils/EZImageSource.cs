@@ -1,5 +1,6 @@
 ﻿using System;
 using System.ComponentModel;
+using System.Drawing.Printing;
 using System.Threading;
 using System.Windows;
 using System.Windows.Media;
@@ -96,7 +97,7 @@ namespace MatjesUtils {
         /// </summary>
         /// <param name="image">The image to write</param>
         /// <param name="cancel">Thread signal to cancel the write</param>
-        public void Write(Image8 image, AutoResetEvent cancel) {
+        public void Write(Image8 image, WaitHandle cancel) {
             if (IsDisposed)
                 throw new ObjectDisposedException("EZImageSource");
             //if image sizes don't match re-initialize raw image, scaled image and UI image
@@ -141,7 +142,7 @@ namespace MatjesUtils {
         /// Write raw version of the image to screen
         /// </summary>
         /// <param name="cancel">Signals us to stop</param>
-        void UpdateImage(AutoResetEvent cancel)
+        void UpdateImage(WaitHandle cancel)
         {
             var done = new AutoResetEvent(false);
             //write raw image to screen
@@ -168,7 +169,7 @@ namespace MatjesUtils {
         /// and write to screen
         /// </summary>
         /// <param name="cancel">Signals us to stop</param>
-        void UpdateImageScaled(AutoResetEvent cancel) {
+        void UpdateImageScaled(WaitHandle cancel) {
             //copy raw image to scaled version
             ip.ippiCopy_8u_C1R(imageRaw.Image, imageRaw.Stride, imageScaled.Image, imageScaled.Stride, imageRaw.Size);
             //scale brightness

@@ -137,6 +137,47 @@ namespace Hamamatsu.Native
             FRAMEREADY = 2,
             STOPPED = 16
         }
+        // Acquisition pixel types
+        public enum DCAM_PIXELTYPE : int
+        {
+            DCAM_PIXELTYPE_MONO8 = 0x00000001,
+            DCAM_PIXELTYPE_MONO16 = 0x00000002,
+            DCAM_PIXELTYPE_MONO12 = 0x00000003,
+            DCAM_PIXELTYPE_MONO12P = 0x00000005,
+
+            DCAM_PIXELTYPE_RGB24 = 0x00000021,
+            DCAM_PIXELTYPE_RGB48 = 0x00000022,
+            DCAM_PIXELTYPE_BGR24 = 0x00000029,
+            DCAM_PIXELTYPE_BGR48 = 0x0000002a,
+
+            DCAM_PIXELTYPE_NONE = 0x00000000
+        }
+
+        public enum DCAM_TRIGGERSOURCE : int
+        {
+            DCAMPROP_TRIGGERSOURCE__INTERNAL = 1,           /*	"INTERNAL"				*/
+            DCAMPROP_TRIGGERSOURCE__EXTERNAL = 2,           /*	"EXTERNAL"				*/
+            DCAMPROP_TRIGGERSOURCE__SOFTWARE = 3,           /*	"SOFTWARE"				*/
+            DCAMPROP_TRIGGERSOURCE__MASTERPULSE = 4,			/*	"MASTER PULSE"			*/
+        }
+
+        public enum DCAM_TRIGGERACTIVE : int
+        {
+            DCAMPROP_TRIGGERACTIVE__EDGE = 1,           /*	"EDGE"					*/
+            DCAMPROP_TRIGGERACTIVE__LEVEL = 2,          /*	"LEVEL"					*/
+            DCAMPROP_TRIGGERACTIVE__SYNCREADOUT = 3,            /*	"SYNCREADOUT"			*/
+            DCAMPROP_TRIGGERACTIVE__POINT = 4,			/*	"POINT"					*/
+        }
+
+        public enum DCAM_TRIGGERMODE : int
+        {
+            DCAMPROP_TRIGGER_MODE__NORMAL = 1,          /*	"NORMAL"				*/
+            /*	= 2,	*/
+            DCAMPROP_TRIGGER_MODE__PIV = 3,         /*	"PIV"					*/
+            DCAMPROP_TRIGGER_MODE__START = 6,           /*	"START"					*/
+            DCAMPROP_TRIGGER_MODE__MULTIGATE = 7,           /*	"MULTIGATE"				*/    /* reserved */
+            DCAMPROP_TRIGGER_MODE__MULTIFRAME = 8,			/*	"MULTIFRAME"			*/	/* reserved */
+        }
 
         // Essential Property IDs (from dcamprop.h)
         // Add more as needed from the Hamamatsu C++ headers
@@ -155,8 +196,9 @@ namespace Hamamatsu.Native
         public const int DCAM_IDPROP_SUBARRAYHSIZE = 0x04108210; // Width
         public const int DCAM_IDPROP_SUBARRAYVSIZE = 0x04108220; // Height
 
-        // Bit Depth
+        // Bit Depth and pixel type (mutually exclusive, shoudl use pixel-type on Fusion)
         public const int DCAM_IDPROP_BITSPERCHANNEL = 0x00420130;
+        public const int DCAM_IDPROP_IMAGE_PIXELTYPE = 0x00420270;	/* R/W, DCAM_PIXELTYPE,	"IMAGE PIXEL TYPE"	*/
 
         [StructLayout(LayoutKind.Sequential)]
         public struct DCAMAPI_INIT
@@ -206,7 +248,7 @@ namespace Hamamatsu.Native
             public int nFrameCount;
         }
 
-        [StructLayout(LayoutKind.Sequential)]
+        [StructLayout(LayoutKind.Sequential,Pack=8)]
         public struct DCAMBUF_FRAME
         {
             public int size;
@@ -215,7 +257,7 @@ namespace Hamamatsu.Native
             public int iFrame;
             public IntPtr buf;
             public int rowbytes;
-            public int type;
+            public DCAM_PIXELTYPE type;
             public int width;
             public int height;
             public int left;

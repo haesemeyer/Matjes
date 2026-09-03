@@ -18,7 +18,6 @@ namespace MatjesImager.ViewModels
         public EZImageSource CamDisplay
         {
             get { return _camDisplay; }
-            set { _camDisplay = value; RaisePropertyChanged(nameof(CamDisplay)); }
         }
 
         Image8? _camImage;
@@ -39,7 +38,7 @@ namespace MatjesImager.ViewModels
             if (IsInDesignMode)
                 return;
             _camDisplay = new EZImageSource();
-            StartAcquisition(50, -1, 1);
+            StartAcquisition(10, -1, 1);
         }
 
         public void StartAcquisition(double frameRateHz, double minVolts, double maxVolts, int sweepsPerFrame = 10)
@@ -49,13 +48,14 @@ namespace MatjesImager.ViewModels
                 // 1. Initialize Camera using custom wrapper
                 _camera = new DcamCamera(0);
 
-                //_camera.SetBitDepth(8);
+                _camera.SetPixelType(DcamNative.DCAM_PIXELTYPE.DCAM_PIXELTYPE_MONO8);
 
                 // 2. Configure Camera hardware trigger
                 double exposureTime = (1.0 / frameRateHz) - 0.002;
                 
-                // TODO: Uncomment to re-activate hardware trigger!
+                //TODO: Change back to re-activate hardware trigger!
                 //_camera.ConfigureHardwareTrigger(exposureTime);
+                _camera.ConfigureInternalTrigger(exposureTime);
 
                 // 3. Setup Analog Output Task for Mirrors
                 _aoTask = new NationalInstruments.DAQmx.Task();
@@ -134,7 +134,7 @@ namespace MatjesImager.ViewModels
 
                     DcamNative.DCAMBUF_FRAME frame = _camera.LockFrame(newestFrameIndex);
 
-                    ProcessFrame(frame.buf, frame.width, frame.height, frame.rowbytes);
+                    ProcessFrame(frame.buf, frame.width, frame.height, frame.rowbytes, token);
                 }
                 else
                 {
@@ -143,15 +143,19 @@ namespace MatjesImager.ViewModels
             }
         }
 
-        private void ProcessFrame(IntPtr unmanagedBuffer, int width, int height, int rowBytes)
+        private void ProcessFrame(IntPtr unmanagedBuffer, int width, int height, int rowBytes, CancellationToken token)
         {
             if (_camImage == null)
             {
                 _camImage = new Image8(new ipp.IppiSize(width, height));
             }
             ipp.ip.ippiCopy_8u_C1R((byte*)unmanagedBuffer, rowBytes, _camImage.Image, _camImage.Stride, _camImage.Size);
-
-            _camDisplay.Write(_camImage, null);
+            //ipp.ip.ippiSet_8u_C1R(0, _camImage.Image, _camImage.Stride, _camImage.Size);
+            try
+            {
+                CamDisplay.Write(_camImage, token.WaitHandle);
+            }
+            catch (OperationCanceledException) { }
         }
 
         public void StopAcquisition()

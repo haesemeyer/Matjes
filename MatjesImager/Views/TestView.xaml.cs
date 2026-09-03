@@ -23,12 +23,18 @@ namespace MatjesImager.Views
     /// </summary>
     public partial class TestView : WindowAwareView
     {
-        TestViewModel viewModel;
+        TestViewModel _viewModel;
 
         public TestView()
         {
             InitializeComponent();
-            viewModel = this.ViewModel.Source as TestViewModel;
+            _viewModel = this.ViewModel.Source as TestViewModel;
+        }
+
+        protected override void WindowClosing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            _viewModel?.Dispose();
+            base.WindowClosing(sender, e);
         }
     }
 }
