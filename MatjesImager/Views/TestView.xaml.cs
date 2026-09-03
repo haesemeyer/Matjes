@@ -23,7 +23,7 @@ namespace MatjesImager.Views
     /// </summary>
     public partial class TestView : WindowAwareView
     {
-        TestViewModel _viewModel;
+        TestViewModel? _viewModel;
 
         public TestView()
         {

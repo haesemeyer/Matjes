@@ -4,6 +4,7 @@ using MatjesUtils;
 using NationalInstruments.DAQmx;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.Eventing.Reader;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -20,6 +21,22 @@ namespace MatjesImager.ViewModels
             get { return _camDisplay; }
         }
 
+        private double _sheetLeftVolts;
+
+        public double SheetLeftVolts
+        {
+            get { return _sheetLeftVolts;}
+            set { _sheetLeftVolts = value; RaisePropertyChanged(nameof(SheetLeftVolts)); }
+        }
+
+        private double _sheetRightVolts;
+
+        public double SheetRightVolts
+        {
+            get { return _sheetRightVolts; }
+            set { _sheetRightVolts = value; RaisePropertyChanged(nameof(SheetRightVolts)); }
+        }
+
         Image8? _camImage;
 
         private DcamCamera? _camera; // Using our custom P/Invoke wrapper
@@ -28,20 +45,25 @@ namespace MatjesImager.ViewModels
 
         // NI-DAQmx Tasks
         private NationalInstruments.DAQmx.Task? _counterTask;
-        private NationalInstruments.DAQmx.Task? _aoTask;
+        private NationalInstruments.DAQmx.Task? _aoTask_sheet;
 
         private string _counterChannel = "Dev1/ctr0";
         private string _aoChannel0 = "Dev1/ao0";
-        private string _aoChannel1 = "Dev1/ao1";
+        private string _aoChannel1 = "Dev1/ao2";
+
+        private int _samplesPerFrame = 1000;
+        private int _sweepsPerFrame = 2;
 
         public TestViewModel() {
+            SheetLeftVolts = -1;
+            SheetRightVolts = 1;
             if (IsInDesignMode)
                 return;
             _camDisplay = new EZImageSource();
-            StartAcquisition(10, -1, 1);
+            StartAcquisition(100);
         }
 
-        public void StartAcquisition(double frameRateHz, double minVolts, double maxVolts, int sweepsPerFrame = 10)
+        public void StartAcquisition(double frameRateHz)
         {
             try
             {
@@ -58,18 +80,17 @@ namespace MatjesImager.ViewModels
                 _camera.ConfigureInternalTrigger(exposureTime);
 
                 // 3. Setup Analog Output Task for Mirrors
-                _aoTask = new NationalInstruments.DAQmx.Task();
-                _aoTask.AOChannels.CreateVoltageChannel(_aoChannel0, "Mirror1", minVolts, maxVolts, AOVoltageUnits.Volts);
-                _aoTask.AOChannels.CreateVoltageChannel(_aoChannel1, "Mirror2", minVolts, maxVolts, AOVoltageUnits.Volts);
+                _aoTask_sheet = new NationalInstruments.DAQmx.Task();
+                _aoTask_sheet.AOChannels.CreateVoltageChannel(_aoChannel0, "Mirror1", -5, 5, AOVoltageUnits.Volts);
+                _aoTask_sheet.AOChannels.CreateVoltageChannel(_aoChannel1, "Mirror2", -5, 5, AOVoltageUnits.Volts);
 
-                int samplesPerFrame = 1000;
-                double aoSampleRate = frameRateHz * samplesPerFrame;
-                double[,] waveformBuffer = GenerateTriangleBuffer(samplesPerFrame, sweepsPerFrame, minVolts, maxVolts);
+                double aoSampleRate = frameRateHz * _samplesPerFrame;
+                double[,] waveformBuffer = GenerateTriangleBuffer(_samplesPerFrame, _sweepsPerFrame, _sheetLeftVolts, _sheetRightVolts);
 
-                _aoTask.Timing.ConfigureSampleClock("", aoSampleRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, samplesPerFrame);
-                _aoTask.Triggers.StartTrigger.ConfigureDigitalEdgeTrigger($"/Dev1/ctr0InternalOutput", DigitalEdgeStartTriggerEdge.Rising);
+                _aoTask_sheet.Timing.ConfigureSampleClock("", aoSampleRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, _samplesPerFrame);
+                _aoTask_sheet.Triggers.StartTrigger.ConfigureDigitalEdgeTrigger($"/Dev1/ctr0InternalOutput", DigitalEdgeStartTriggerEdge.Rising);
 
-                AnalogMultiChannelWriter aoWriter = new AnalogMultiChannelWriter(_aoTask.Stream);
+                AnalogMultiChannelWriter aoWriter = new AnalogMultiChannelWriter(_aoTask_sheet.Stream);
                 aoWriter.WriteMultiSample(false, waveformBuffer);
 
                 // 4. Setup Counter Output Task for Camera Trigger
@@ -85,15 +106,15 @@ namespace MatjesImager.ViewModels
                 _cancellationTokenSource = new CancellationTokenSource();
 
                 // 6. Start AO task (enters armed state waiting for ctr0 pulse)
-                _aoTask.Start();
+                _aoTask_sheet.Start();
 
                 // 7. Launch image receiving thread
                 System.Threading.Tasks.Task.Run(() => AcquisitionLoop(_cancellationTokenSource.Token));
 
+                System.Threading.Tasks.Task.Run(() => SheetLoop(_cancellationTokenSource.Token));
+
                 // 8. Start Counter Task LAST (fires everything synchronously)
                 _counterTask.Start();
-
-                Console.WriteLine($"Custom wrapper acquisition started at {frameRateHz} Hz.");
             }
             catch (Exception)
             {
@@ -150,12 +171,25 @@ namespace MatjesImager.ViewModels
                 _camImage = new Image8(new ipp.IppiSize(width, height));
             }
             ipp.ip.ippiCopy_8u_C1R((byte*)unmanagedBuffer, rowBytes, _camImage.Image, _camImage.Stride, _camImage.Size);
-            //ipp.ip.ippiSet_8u_C1R(0, _camImage.Image, _camImage.Stride, _camImage.Size);
             try
             {
                 CamDisplay.Write(_camImage, token.WaitHandle);
             }
             catch (OperationCanceledException) { }
+        }
+
+        private void SheetLoop(CancellationToken token)
+        {
+            uint counter = 0;
+            double[,] waveformBuffer;
+            while(_isAcquiring && !token.IsCancellationRequested)
+            {
+                waveformBuffer = GenerateTriangleBuffer(_samplesPerFrame, _sweepsPerFrame, SheetLeftVolts, SheetRightVolts);
+                AnalogMultiChannelWriter aoWriter = new AnalogMultiChannelWriter(_aoTask_sheet.Stream);
+                aoWriter.WriteMultiSample(false, waveformBuffer);
+                Thread.Sleep(100);
+                counter++;
+            }
         }
 
         public void StopAcquisition()
@@ -164,7 +198,7 @@ namespace MatjesImager.ViewModels
             _cancellationTokenSource?.Cancel();
 
             _counterTask?.Stop();
-            _aoTask?.Stop();
+            _aoTask_sheet?.Stop();
 
             if (_camera != null)
             {
@@ -176,7 +210,7 @@ namespace MatjesImager.ViewModels
         private void Cleanup()
         {
             _counterTask?.Dispose();
-            _aoTask?.Dispose();
+            _aoTask_sheet?.Dispose();
 
             _camera?.Dispose();
             _camera = null;
