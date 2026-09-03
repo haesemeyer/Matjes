@@ -156,6 +156,11 @@ namespace Hamamatsu.Dcam
             SetProperty(DcamNative.DCAM_IDPROP_IMAGE_PIXELTYPE, (int)pixel_type);
         }
 
+        public void SetReadoutSpeed(DcamNative.DCAM_READOUT_SPEED readout_speed)
+        {
+            SetProperty(DcamNative.DCAM_IDPROP_READOUTSPEED, (int)readout_speed);
+        }
+
         // --- Capture & Sync ---
 
         public void StartCapture(DcamNative.DCAMCAP_START mode = DcamNative.DCAMCAP_START.SEQUENCE)

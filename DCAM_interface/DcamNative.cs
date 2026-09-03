@@ -179,6 +179,13 @@ namespace Hamamatsu.Native
             DCAMPROP_TRIGGER_MODE__MULTIFRAME = 8,			/*	"MULTIFRAME"			*/	/* reserved */
         }
 
+        public enum DCAM_READOUT_SPEED : int
+        {
+            DCAMPROP_READOUT_SPEED_LOWNOISE = 1,
+            DCAMPROP_READOUT_SPEED_NORMAL = 2,
+            DCAMPROP_READOUT_SPEED_FAST =3,
+        }
+
         // Essential Property IDs (from dcamprop.h)
         // Add more as needed from the Hamamatsu C++ headers
         public const int DCAM_IDPROP_EXPOSURETIME = 0x001F0110;
@@ -199,6 +206,9 @@ namespace Hamamatsu.Native
         // Bit Depth and pixel type (mutually exclusive, shoudl use pixel-type on Fusion)
         public const int DCAM_IDPROP_BITSPERCHANNEL = 0x00420130;
         public const int DCAM_IDPROP_IMAGE_PIXELTYPE = 0x00420270;	/* R/W, DCAM_PIXELTYPE,	"IMAGE PIXEL TYPE"	*/
+
+        // Readout speed
+        public const int DCAM_IDPROP_READOUTSPEED = 0x00400110;
 
         [StructLayout(LayoutKind.Sequential)]
         public struct DCAMAPI_INIT

@@ -53,6 +53,35 @@ namespace MatjesImager.ViewModels
             set { _sheet2RightVolts = value; RaisePropertyChanged(nameof(Sheet2RightVolts)); }
         }
 
+        private double _z1_fixed;
+
+        public double Z1_Fixed
+        {
+            get { return _z1_fixed; }
+            set { _z1_fixed = value; RaisePropertyChanged(nameof(Z1_Fixed));}
+        }
+
+        private double _z2_fixed;
+
+        public double Z2_Fixed
+        {
+            get { return _z2_fixed; }
+            set { _z2_fixed = value; RaisePropertyChanged(nameof(Z2_Fixed)); }
+        }
+
+        private double _piezo_fixed;
+
+        public double Piezo_Fixed
+        {
+            get { return _piezo_fixed; }
+            set { _piezo_fixed = value; RaisePropertyChanged(nameof(Piezo_Fixed)); RaisePropertyChanged(nameof(Pieze_Microns)); }
+        }
+
+        public string Pieze_Microns
+        {
+            get { return string.Format("{0:F2} uM", _piezo_fixed * 45); }
+        }
+
         Image8? _camImage;
 
         private DcamCamera? _camera; // Using our custom P/Invoke wrapper
@@ -62,10 +91,18 @@ namespace MatjesImager.ViewModels
         // NI-DAQmx Tasks
         private NationalInstruments.DAQmx.Task? _counterTask;
         private NationalInstruments.DAQmx.Task? _aoTask_sheet;
+        private NationalInstruments.DAQmx.Task? _aoTask_Z;
 
+        // Analog control channels
         private string _counterChannel = "Dev1/ctr0";
-        private string _aoChannel0 = "Dev1/ao0";
-        private string _aoChannel1 = "Dev1/ao2";
+        private string _sheet1Channel = "Dev1/ao0";
+        private string _sheet2Channel = "Dev1/ao2";
+
+        private string _z1Channel = "Dev2/ao1";
+
+        private string _z2Channel = "Dev2/ao2";
+
+        private string _piezoChannel = "Dev2/ao0";
 
         private int _samplesPerFrame = 1000;
         private int _sweepsPerFrame = 2;
@@ -75,6 +112,9 @@ namespace MatjesImager.ViewModels
             Sheet1RightVolts = 1;
             Sheet2LeftVolts = -0.5;
             Sheet2RightVolts = 0.5;
+            Z1_Fixed = 0;
+            Z2_Fixed = 0;
+            Piezo_Fixed = 0;
             if (IsInDesignMode)
                 return;
             _camDisplay = new EZImageSource();
@@ -89,6 +129,7 @@ namespace MatjesImager.ViewModels
                 _camera = new DcamCamera(0);
 
                 _camera.SetPixelType(DcamNative.DCAM_PIXELTYPE.DCAM_PIXELTYPE_MONO8);
+                _camera.SetReadoutSpeed(DcamNative.DCAM_READOUT_SPEED.DCAMPROP_READOUT_SPEED_FAST);
 
                 // 2. Configure Camera hardware trigger
                 double exposureTime = (1.0 / frameRateHz) - 0.002;
@@ -99,17 +140,30 @@ namespace MatjesImager.ViewModels
 
                 // 3. Setup Analog Output Task for Mirrors
                 _aoTask_sheet = new NationalInstruments.DAQmx.Task();
-                _aoTask_sheet.AOChannels.CreateVoltageChannel(_aoChannel0, "Mirror1", -5, 5, AOVoltageUnits.Volts);
-                _aoTask_sheet.AOChannels.CreateVoltageChannel(_aoChannel1, "Mirror2", -5, 5, AOVoltageUnits.Volts);
+                _aoTask_sheet.AOChannels.CreateVoltageChannel(_sheet1Channel, "MirrorX1", -5, 5, AOVoltageUnits.Volts);
+                _aoTask_sheet.AOChannels.CreateVoltageChannel(_sheet2Channel, "MirrorX2", -5, 5, AOVoltageUnits.Volts);
+
+                _aoTask_Z = new NationalInstruments.DAQmx.Task();
+                _aoTask_Z.AOChannels.CreateVoltageChannel(_z1Channel, "MirrorY1", -5, 5, AOVoltageUnits.Volts);
+                _aoTask_Z.AOChannels.CreateVoltageChannel(_z2Channel, "MirrorY2", -5, 5, AOVoltageUnits.Volts);
+                _aoTask_Z.AOChannels.CreateVoltageChannel(_piezoChannel, "Piezo", 0, 10, AOVoltageUnits.Volts);
+
 
                 double aoSampleRate = frameRateHz * _samplesPerFrame;
-                double[,] waveformBuffer = GenerateTriangleBuffer(_samplesPerFrame, _sweepsPerFrame, Sheet1LeftVolts, Sheet1RightVolts, Sheet2LeftVolts, Sheet2RightVolts);
 
+                double[,] waveformBuffer = GenerateTriangleBuffer(_samplesPerFrame, _sweepsPerFrame, Sheet1LeftVolts, Sheet1RightVolts, Sheet2LeftVolts, Sheet2RightVolts);
                 _aoTask_sheet.Timing.ConfigureSampleClock("", aoSampleRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, _samplesPerFrame);
                 _aoTask_sheet.Triggers.StartTrigger.ConfigureDigitalEdgeTrigger($"/Dev1/ctr0InternalOutput", DigitalEdgeStartTriggerEdge.Rising);
 
-                AnalogMultiChannelWriter aoWriter = new AnalogMultiChannelWriter(_aoTask_sheet.Stream);
-                aoWriter.WriteMultiSample(false, waveformBuffer);
+                double[,] z_fixed_buffer = GenerateZBuffer(_samplesPerFrame);
+                _aoTask_Z.Timing.ConfigureSampleClock("", aoSampleRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, _samplesPerFrame);
+                //_aoTask_Z.Triggers.StartTrigger.ConfigureDigitalEdgeTrigger($"/Dev1/ctr0InternalOutput", DigitalEdgeStartTriggerEdge.Rising);
+
+                AnalogMultiChannelWriter sheetWriter = new AnalogMultiChannelWriter(_aoTask_sheet.Stream);
+                sheetWriter.WriteMultiSample(false, waveformBuffer);
+
+                AnalogMultiChannelWriter zWriter = new AnalogMultiChannelWriter(_aoTask_Z.Stream);
+                zWriter.WriteMultiSample(false, z_fixed_buffer);
 
                 // 4. Setup Counter Output Task for Camera Trigger
                 _counterTask = new NationalInstruments.DAQmx.Task();
@@ -125,6 +179,7 @@ namespace MatjesImager.ViewModels
 
                 // 6. Start AO task (enters armed state waiting for ctr0 pulse)
                 _aoTask_sheet.Start();
+                _aoTask_Z.Start();
 
                 // 7. Launch image receiving thread
                 System.Threading.Tasks.Task.Run(() => AcquisitionLoop(_cancellationTokenSource.Token));
@@ -160,6 +215,18 @@ namespace MatjesImager.ViewModels
                     ? vMin2 + (vMax2 - vMin2) * (phase * 2.0)
                     : vMax2 - (vMax2 - vMin2) * ((phase - 0.5) * 2.0);
                 buffer[1, i] = voltage;
+            }
+            return buffer;
+        }
+
+        private double[,] GenerateZBuffer(int totalSamples)
+        {
+            double[,] buffer = new double[3, totalSamples];
+            for (int i = 0; i < totalSamples; i++)
+            {
+                buffer[0, i] = Z1_Fixed;
+                buffer[1, i] = Z2_Fixed;
+                buffer[2, i] = Piezo_Fixed;
             }
             return buffer;
         }
@@ -201,15 +268,17 @@ namespace MatjesImager.ViewModels
 
         private void SheetLoop(CancellationToken token)
         {
-            uint counter = 0;
             double[,] waveformBuffer;
-            while(_isAcquiring && !token.IsCancellationRequested)
+            double[,] zBuffer;
+            AnalogMultiChannelWriter sheetWriter = new AnalogMultiChannelWriter(_aoTask_sheet.Stream);
+            AnalogMultiChannelWriter zWriter = new AnalogMultiChannelWriter(_aoTask_Z.Stream);
+            while (_isAcquiring && !token.IsCancellationRequested)
             {
                 waveformBuffer = GenerateTriangleBuffer(_samplesPerFrame, _sweepsPerFrame, Sheet1LeftVolts, Sheet1RightVolts, Sheet2LeftVolts, Sheet2RightVolts);
-                AnalogMultiChannelWriter aoWriter = new AnalogMultiChannelWriter(_aoTask_sheet.Stream);
-                aoWriter.WriteMultiSample(false, waveformBuffer);
+                sheetWriter.WriteMultiSample(false, waveformBuffer);
+                zBuffer = GenerateZBuffer(_samplesPerFrame);
+                zWriter.WriteMultiSample(false, zBuffer);
                 Thread.Sleep(100);
-                counter++;
             }
         }
 
