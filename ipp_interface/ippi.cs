@@ -10336,6 +10336,11 @@ IppStatus ippiScale_8u32s_C3R (  byte *pSrc, int srcStep, int *pDst, int dstStep
 [DllImport(ipp.ip.libname)] public static extern
 IppStatus ippiScale_8u32s_C4R (  byte *pSrc, int srcStep, int *pDst, int dstStep, IppiSize roiSize );
 
+        [SuppressUnmanagedCodeSecurityAttribute()]
+        [DllImport(ipp.ip.libname)]
+        public static extern
+        IppStatus ippiScaleC_16u8u_C1R(ushort* pSrc, int srcStep, double mVal, double aVal, byte* pDst, int dstStep, IppiSize roiSize, IppHintAlgorithm hint);
+
 [SuppressUnmanagedCodeSecurityAttribute()]
 [DllImport(ipp.ip.libname)] public static extern
 IppStatus ippiSet_16s_AC4MR (  short *value, short *pDst, int dstStep, IppiSize roiSize, byte *pMask, int maskStep );

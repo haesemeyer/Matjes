@@ -20,7 +20,7 @@
             <ColumnDefinition Width="263*"/>
             <ColumnDefinition Width="537*"/>
         </Grid.ColumnDefinitions>
-        <Utils:EZImage HorizontalAlignment="Left" VerticalAlignment="Center" Height="430" Width="509" Margin="18,0,0,0" Source="{Binding CamDisplay, Mode=OneWay}" Grid.Column="1"/>
+        <Utils:EZImage HorizontalAlignment="Left" VerticalAlignment="Center" Height="430" Width="431" Margin="96,0,0,0" Source="{Binding CamDisplay, Mode=OneWay}" Grid.Column="1"/>
         <Slider x:Name="Sldr_sheet1_left" HorizontalAlignment="Left" Margin="10,78,0,0" VerticalAlignment="Top" Width="120" Minimum="-3" Maximum="0" LargeChange="0.25" SmallChange="0.05" TickFrequency="0.5" TickPlacement="BottomRight" Value="{Binding Sheet1LeftVolts}" AutoToolTipPlacement="TopLeft"/>
         <Slider x:Name="Sldr_sheet1_right" HorizontalAlignment="Left" Margin="133,78,0,0" VerticalAlignment="Top" Width="120" Maximum="3" LargeChange="0.25" SmallChange="0.05" TickFrequency="0.5" TickPlacement="BottomRight" Value="{Binding Sheet1RightVolts}" AutoToolTipPlacement="TopLeft"/>
         <Label HorizontalAlignment="Left" Margin="17,52,0,0" VerticalAlignment="Top" Content="{Binding Sheet1LeftVolts, ConverterParameter=2, Converter={StaticResource RoundDoubleConverter}}"/>
@@ -42,6 +42,8 @@
         <Label HorizontalAlignment="Left" Margin="9,343,0,0" VerticalAlignment="Top" RenderTransformOrigin="3.658,1.116" Content="{Binding Pieze_Microns, Mode=OneWay}"/>
         <Label Content="{Binding FrameIndex}" HorizontalAlignment="Left" Margin="187,424,0,0" VerticalAlignment="Top" Width="74" FontSize="10"/>
         <Label Content="{Binding FrameRate, ConverterParameter=2, Converter={StaticResource RoundDoubleConverter}}" HorizontalAlignment="Left" Margin="39,424,0,0" VerticalAlignment="Top" FontSize="10" Background="#FFECAB1C" Width="52"/>
+        <Slider x:Name="ImageMin" Grid.Column="1" HorizontalAlignment="Left" Margin="10,43,0,0" VerticalAlignment="Top" Width="22" Orientation="Vertical" Height="115" IsDirectionReversed="True" Maximum="65535" LargeChange="100" SmallChange="10" Value="{Binding ImageScaleMin}"/>
+        <Slider x:Name="ImageMax" Grid.Column="1" HorizontalAlignment="Left" Margin="10,218,0,0" VerticalAlignment="Top" Width="22" Orientation="Vertical" Height="115" IsDirectionReversed="True" Maximum="65535" LargeChange="100" SmallChange="10" Value="{Binding ImageScaleMax}"/>
 
 
     </Grid>

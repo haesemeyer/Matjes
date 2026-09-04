@@ -614,7 +614,13 @@ IppStatus ippiGammaInv_8u_IP3R (  byte **pSrcDst, int srcDstStep, IppiSize roiSi
 [DllImport(ipp.cc.libname)] public static extern
 IppStatus ippiGammaInv_8u_P3R (  byte **pSrc, int srcStep, byte **pDst, int dstStep, IppiSize roiSize );
 
-[SuppressUnmanagedCodeSecurityAttribute()]
+        [SuppressUnmanagedCodeSecurityAttribute()]
+        [DllImport(ipp.cc.libname)]
+        public static extern
+        IppStatus ippiGrayToRGB_8u_C1C3R(byte* pScrc, int srcStep, byte* pDst, int dstStep, IppiSize roiSize);
+
+
+        [SuppressUnmanagedCodeSecurityAttribute()]
 [DllImport(ipp.cc.libname)] public static extern
 IppStatus ippiHLSToBGR_8u_AC4P4R (  byte *pSrc, int srcStep, byte **pDst, int dstStep, IppiSize roiSize );
 

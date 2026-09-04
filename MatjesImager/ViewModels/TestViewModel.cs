@@ -98,7 +98,25 @@ namespace MatjesImager.ViewModels
             set { _frameRate = value; RaisePropertyChanged(nameof(FrameRate)); }
         }
 
+        private double _image_scale_min = 0.0;
+
+        public double ImageScaleMin
+        {
+            get{return _image_scale_min; }
+            set{_image_scale_min = value; RaisePropertyChanged(nameof(ImageScaleMin)); }
+        }
+
+        private double _image_scale_max = ushort.MaxValue;
+
+        public double ImageScaleMax
+        {
+            get { return _image_scale_max; }
+            set { _image_scale_max = value; RaisePropertyChanged(nameof(ImageScaleMax));}
+        }
+
         Image8? _camImage;
+
+        Image16? _camImage16;
 
         private DcamCamera? _camera; // Using our custom P/Invoke wrapper
         private bool _isAcquiring = false;
@@ -133,7 +151,7 @@ namespace MatjesImager.ViewModels
             Piezo_Fixed = 0;
             if (IsInDesignMode)
                 return;
-            _camDisplay = new EZImageSource();
+            _camDisplay = new EZImageSource_LH();
             StartAcquisition(100);
         }
 
@@ -144,7 +162,7 @@ namespace MatjesImager.ViewModels
                 // 1. Initialize Camera using custom wrapper
                 _camera = new DcamCamera(0);
 
-                _camera.SetPixelType(DcamNative.DCAM_PIXELTYPE.DCAM_PIXELTYPE_MONO8);
+                _camera.SetPixelType(DcamNative.DCAM_PIXELTYPE.DCAM_PIXELTYPE_MONO16);
                 _camera.SetReadoutSpeed(DcamNative.DCAM_READOUT_SPEED.DCAMPROP_READOUT_SPEED_FAST);
                 _camera.SetROI(xOffset: 0, yOffset: 160, width: 2304, height: 2048);
 
@@ -285,11 +303,13 @@ namespace MatjesImager.ViewModels
 
         private void ProcessFrame(IntPtr unmanagedBuffer, int width, int height, int rowBytes, CancellationToken token)
         {
-            if (_camImage == null)
+            if (_camImage == null || _camImage.Width != width || _camImage.Height != height)
             {
                 _camImage = new Image8(new ipp.IppiSize(width, height));
+                _camImage16 = new Image16(width, height);
             }
-            ipp.ip.ippiCopy_8u_C1R((byte*)unmanagedBuffer, rowBytes, _camImage.Image, _camImage.Stride, _camImage.Size);
+            ipp.ip.ippiCopy_16u_C1R((ushort*)unmanagedBuffer, rowBytes, _camImage16.Image, _camImage16.Stride, _camImage16.Size);
+            ipp.ip.ippiScaleC_16u8u_C1R(_camImage16.Image, _camImage16.Stride, (double)byte.MaxValue/(ImageScaleMax-ImageScaleMin), -ImageScaleMin, _camImage.Image, _camImage.Stride, _camImage16.Size, ipp.IppHintAlgorithm.ippAlgHintFast);
             if (FrameIndex % 10 == 0)
             {
                 try
