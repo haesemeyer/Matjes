@@ -1,0 +1,80 @@
+<UserControl x:Class="MatjesUtils.RangeSlider"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d"
+             x:Name="RootControl"
+             d:DesignHeight="50" d:DesignWidth="300">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+
+        <Style x:Key="RangeThumbStyle" TargetType="Thumb">
+            <Setter Property="Width" Value="16"/>
+            <Setter Property="Height" Value="16"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Ellipse Fill="White" Stroke="#FF4A90D9" StrokeThickness="2"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <!-- Root is a Grid (not a StackPanel) so the slider row can be told to
+         fill all available space (Height="*") in vertical mode. A StackPanel
+         would always collapse its stacking-axis size to the content's Auto
+         size, which is 0 for an empty Canvas. -->
+    <Grid x:Name="PART_RootGrid"
+          HorizontalAlignment="Stretch"
+          VerticalAlignment="Stretch">
+        <Grid.RowDefinitions>
+            <RowDefinition x:Name="PART_SliderRow" Height="20"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Track + thumbs. All sizing (width/height/alignment/thumb offsets) for
+             horizontal vs. vertical layout is applied in code-behind, based on
+             the IsVertical property, so this markup stays orientation-neutral. -->
+        <Grid x:Name="PART_SliderGrid" Grid.Row="0">
+
+            <!-- Full-length background track -->
+            <Border x:Name="PART_TrackBackground"
+                    Background="#FFD6D6D6"
+                    CornerRadius="2"/>
+
+            <!-- Canvas hosts the highlighted range bar and the two thumbs so they
+                 can be positioned with pixel-precise Canvas.Left/Canvas.Top values -->
+            <Canvas x:Name="PART_TrackCanvas"
+                    Background="Transparent"
+                    SizeChanged="PART_TrackCanvas_SizeChanged"
+                    MouseLeftButtonDown="PART_TrackCanvas_MouseLeftButtonDown">
+
+                <Border x:Name="PART_SelectedRange"
+                        Background="#FF4A90D9"
+                        CornerRadius="2"/>
+
+                <Thumb x:Name="PART_MinThumb"
+                       Style="{StaticResource RangeThumbStyle}"
+                       DragDelta="PART_MinThumb_DragDelta"/>
+
+                <Thumb x:Name="PART_MaxThumb"
+                       Style="{StaticResource RangeThumbStyle}"
+                       DragDelta="PART_MaxThumb_DragDelta"/>
+            </Canvas>
+        </Grid>
+
+        <!-- Optional "min - max" readout -->
+        <TextBlock x:Name="PART_RangeText"
+                   Grid.Row="1"
+                   HorizontalAlignment="Center"
+                   Margin="0,2,0,0"
+                   FontSize="12"
+                   Foreground="#FF555555"
+                   Visibility="{Binding ShowRangeText, ElementName=RootControl, Converter={StaticResource BoolToVisibilityConverter}}"
+                   Text="{Binding RangeText, ElementName=RootControl}"/>
+    </Grid>
+</UserControl>
