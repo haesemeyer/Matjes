@@ -309,7 +309,9 @@ namespace MatjesImager.ViewModels
                 _camImage16 = new Image16(width, height);
             }
             ipp.ip.ippiCopy_16u_C1R((ushort*)unmanagedBuffer, rowBytes, _camImage16.Image, _camImage16.Stride, _camImage16.Size);
-            ipp.ip.ippiScaleC_16u8u_C1R(_camImage16.Image, _camImage16.Stride, (double)byte.MaxValue/(ImageScaleMax-ImageScaleMin), -ImageScaleMin, _camImage.Image, _camImage.Stride, _camImage16.Size, ipp.IppHintAlgorithm.ippAlgHintFast);
+            double scale_factor = (double)byte.MaxValue / (ImageScaleMax - ImageScaleMin);
+            double min_value = -ImageScaleMin * scale_factor;
+            ipp.ip.ippiScaleC_16u8u_C1R(_camImage16.Image, _camImage16.Stride, scale_factor, min_value, _camImage.Image, _camImage.Stride, _camImage16.Size, ipp.IppHintAlgorithm.ippAlgHintFast);
             if (FrameIndex % 10 == 0)
             {
                 try
