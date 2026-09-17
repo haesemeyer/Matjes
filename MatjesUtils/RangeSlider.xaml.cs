@@ -89,6 +89,20 @@ namespace MatjesUtils
                 nameof(IsVertical), typeof(bool), typeof(RangeSlider),
                 new FrameworkPropertyMetadata(false, OnIsVerticalChanged));
 
+        /// <summary>Value the lower handle snaps to when double-clicked. Null (the default)
+        /// disables double-click-to-reset for that handle.</summary>
+        public static readonly DependencyProperty DefaultLowerValueProperty =
+            DependencyProperty.Register(
+                nameof(DefaultLowerValue), typeof(double?), typeof(RangeSlider),
+                new FrameworkPropertyMetadata((double?)null));
+
+        /// <summary>Value the upper handle snaps to when double-clicked. Null (the default)
+        /// disables double-click-to-reset for that handle.</summary>
+        public static readonly DependencyProperty DefaultUpperValueProperty =
+            DependencyProperty.Register(
+                nameof(DefaultUpperValue), typeof(double?), typeof(RangeSlider),
+                new FrameworkPropertyMetadata((double?)null));
+
         public double Minimum
         {
             get => (double)GetValue(MinimumProperty);
@@ -141,6 +155,18 @@ namespace MatjesUtils
         {
             get => (bool)GetValue(IsVerticalProperty);
             set => SetValue(IsVerticalProperty, value);
+        }
+
+        public double? DefaultLowerValue
+        {
+            get => (double?)GetValue(DefaultLowerValueProperty);
+            set => SetValue(DefaultLowerValueProperty, value);
+        }
+
+        public double? DefaultUpperValue
+        {
+            get => (double?)GetValue(DefaultUpperValueProperty);
+            set => SetValue(DefaultUpperValueProperty, value);
         }
 
         #endregion
@@ -253,6 +279,8 @@ namespace MatjesUtils
 
         // Switches the track/thumb sizing and alignment between horizontal and vertical layout.
         // Called once at construction and again whenever IsVertical changes.
+        // Note: cross-axis offsets (centring the track bar and thumbs) are NOT set here --
+        // they depend on the canvas's measured size and are applied in UpdateThumbPositions.
         private void ApplyOrientation()
         {
             if (PART_SliderGrid == null) return;
@@ -278,18 +306,18 @@ namespace MatjesUtils
 
                 PART_SelectedRange.Width = TrackThickness;
                 PART_SelectedRange.Height = double.NaN;
-                Canvas.SetLeft(PART_SelectedRange, (SliderThickness - TrackThickness) / 2.0);
-
-                Canvas.SetLeft(PART_MinThumb, (SliderThickness - ThumbSize) / 2.0);
-                Canvas.SetLeft(PART_MaxThumb, (SliderThickness - ThumbSize) / 2.0);
             }
             else
             {
-                PART_SliderRow.Height = new GridLength(SliderThickness);
+                // Auto row + explicit grid height, so the grid's Margin is added around the
+                // 20px band rather than being subtracted from it. (A fixed 20px row left the
+                // canvas only 12px tall, which pushed the track bar, the range bar and the
+                // thumbs to three different heights.)
+                PART_SliderRow.Height = GridLength.Auto;
 
-                PART_SliderGrid.Height = double.NaN;
+                PART_SliderGrid.Height = SliderThickness;
                 PART_SliderGrid.Width = double.NaN;
-                PART_SliderGrid.VerticalAlignment = VerticalAlignment.Stretch;
+                PART_SliderGrid.VerticalAlignment = VerticalAlignment.Top;
                 PART_SliderGrid.HorizontalAlignment = HorizontalAlignment.Stretch;
                 PART_SliderGrid.Margin = new Thickness(8, 4, 8, 4);
 
@@ -300,10 +328,6 @@ namespace MatjesUtils
 
                 PART_SelectedRange.Height = TrackThickness;
                 PART_SelectedRange.Width = double.NaN;
-                Canvas.SetTop(PART_SelectedRange, (SliderThickness - TrackThickness) / 2.0);
-
-                Canvas.SetTop(PART_MinThumb, (SliderThickness - ThumbSize) / 2.0);
-                Canvas.SetTop(PART_MaxThumb, (SliderThickness - ThumbSize) / 2.0);
             }
         }
 
@@ -345,6 +369,8 @@ namespace MatjesUtils
             if (PART_TrackCanvas == null || PART_MinThumb == null || PART_MaxThumb == null || PART_SelectedRange == null)
                 return;
 
+            UpdateCrossAxisPositions();
+
             double posLower = ValueToPosition(LowerValue);
             double posUpper = ValueToPosition(UpperValue);
 
@@ -372,6 +398,32 @@ namespace MatjesUtils
             {
                 Canvas.SetLeft(PART_SelectedRange, rangeStart);
                 PART_SelectedRange.Width = rangeLength;
+            }
+        }
+
+        // Centres the thumbs and the selected-range bar on the track's cross axis, using the
+        // canvas's *measured* size rather than a constant. Keeping this size-driven means the
+        // thumbs, the track bar and the range bar can never drift apart if margins, row sizing
+        // or SliderThickness change.
+        private void UpdateCrossAxisPositions()
+        {
+            double cross = IsVertical ? PART_TrackCanvas.ActualWidth : PART_TrackCanvas.ActualHeight;
+            if (cross <= 0) cross = SliderThickness; // before the first layout pass
+
+            double thumbOffset = (cross - ThumbSize) / 2.0;
+            double barOffset = (cross - TrackThickness) / 2.0;
+
+            if (IsVertical)
+            {
+                Canvas.SetLeft(PART_MinThumb, thumbOffset);
+                Canvas.SetLeft(PART_MaxThumb, thumbOffset);
+                Canvas.SetLeft(PART_SelectedRange, barOffset);
+            }
+            else
+            {
+                Canvas.SetTop(PART_MinThumb, thumbOffset);
+                Canvas.SetTop(PART_MaxThumb, thumbOffset);
+                Canvas.SetTop(PART_SelectedRange, barOffset);
             }
         }
 
@@ -405,6 +457,32 @@ namespace MatjesUtils
             double delta = IsVertical ? e.VerticalChange : e.HorizontalChange;
             double newPos = ValueToPosition(UpperValue) + delta;
             UpperValue = PositionToValue(newPos); // coercion keeps it >= LowerValue + MinimumRange
+        }
+
+        // Double-clicking a handle snaps it back to its configured default, if any.
+        // This must hook the TUNNELING preview event: Thumb's own class handler for the
+        // bubbling MouseLeftButtonDown starts the drag and marks the event Handled, and
+        // class handlers run before XAML-attached instance handlers, so a bubbling
+        // handler here would never be invoked.
+        // Assigning through the LowerValue/UpperValue properties still runs the usual
+        // coercion, so the default is clamped to the valid range / MinimumRange gap
+        // just like any other value.
+        private void PART_MinThumb_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ClickCount == 2 && DefaultLowerValue.HasValue)
+            {
+                LowerValue = DefaultLowerValue.Value;
+                e.Handled = true; // also stops the Thumb starting a drag on the second click
+            }
+        }
+
+        private void PART_MaxThumb_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ClickCount == 2 && DefaultUpperValue.HasValue)
+            {
+                UpperValue = DefaultUpperValue.Value;
+                e.Handled = true;
+            }
         }
 
         // Clicking on the track (not on a thumb) snaps the nearer thumb to that position.
