@@ -59,11 +59,13 @@
 
                 <Thumb x:Name="PART_MinThumb"
                        Style="{StaticResource RangeThumbStyle}"
+                       DragStarted="Thumb_DragStarted"
                        DragDelta="PART_MinThumb_DragDelta"
                        PreviewMouseLeftButtonDown="PART_MinThumb_PreviewMouseLeftButtonDown"/>
 
                 <Thumb x:Name="PART_MaxThumb"
                        Style="{StaticResource RangeThumbStyle}"
+                       DragStarted="Thumb_DragStarted"
                        DragDelta="PART_MaxThumb_DragDelta"
                        PreviewMouseLeftButtonDown="PART_MaxThumb_PreviewMouseLeftButtonDown"/>
             </Canvas>

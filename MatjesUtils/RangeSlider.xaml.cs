@@ -103,6 +103,14 @@ namespace MatjesUtils
                 nameof(DefaultUpperValue), typeof(double?), typeof(RangeSlider),
                 new FrameworkPropertyMetadata((double?)null));
 
+        /// <summary>Factor applied to mouse movement while Shift is held, for fine adjustment
+        /// of a large range. 0.2 (the default) means the handle moves at a fifth of the mouse
+        /// speed. Coerced into the range 0.01 - 1.0; 1.0 disables fine adjustment.</summary>
+        public static readonly DependencyProperty FineAdjustmentFactorProperty =
+            DependencyProperty.Register(
+                nameof(FineAdjustmentFactor), typeof(double), typeof(RangeSlider),
+                new FrameworkPropertyMetadata(0.2d, null, CoerceFineAdjustmentFactor));
+
         public double Minimum
         {
             get => (double)GetValue(MinimumProperty);
@@ -167,6 +175,12 @@ namespace MatjesUtils
         {
             get => (double?)GetValue(DefaultUpperValueProperty);
             set => SetValue(DefaultUpperValueProperty, value);
+        }
+
+        public double FineAdjustmentFactor
+        {
+            get => (double)GetValue(FineAdjustmentFactorProperty);
+            set => SetValue(FineAdjustmentFactorProperty, value);
         }
 
         #endregion
@@ -269,6 +283,13 @@ namespace MatjesUtils
             var rs = (RangeSlider)d;
             rs.ApplyOrientation();
             rs.UpdateThumbPositions();
+        }
+
+        private static object CoerceFineAdjustmentFactor(DependencyObject d, object value)
+        {
+            double v = (double)value;
+            if (double.IsNaN(v)) return 1.0;
+            return Clamp(v, 0.01, 1.0);
         }
 
         private static double Clamp(double v, double min, double max) => v < min ? min : (v > max ? max : v);
@@ -445,18 +466,50 @@ namespace MatjesUtils
             UpdateThumbPositions();
         }
 
+        // Drag tracking for fine adjustment. Thumb reports its delta relative to a drag
+        // origin that moves with the thumb, i.e. reportedDelta == rawMouseTravel - thumbTravel.
+        // When the thumb is deliberately moved less than the mouse (Shift held), the unconsumed
+        // travel is therefore re-reported on the next event and would be re-applied, letting the
+        // thumb creep back up to full mouse speed. So instead of scaling the reported delta, the
+        // true mouse travel is reconstructed and only its *increment* is scaled.
+        private double _dragStartPos;
+        private double _dragLastRawTravel;
+
+        private static bool IsFineAdjustment =>
+            (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+
+        private void Thumb_DragStarted(object sender, DragStartedEventArgs e)
+        {
+            double value = ReferenceEquals(sender, PART_MinThumb) ? LowerValue : UpperValue;
+            _dragStartPos = ValueToPosition(value);
+            _dragLastRawTravel = 0;
+        }
+
+        private double ComputeDragPosition(double currentPos, double reportedDelta)
+        {
+            double rawTravel = (currentPos - _dragStartPos) + reportedDelta;
+            double rawIncrement = rawTravel - _dragLastRawTravel;
+            _dragLastRawTravel = rawTravel;
+
+            // Re-reading currentPos each time means a drag that gets clamped (by the range
+            // limits or by the other handle) resumes immediately when the mouse comes back,
+            // rather than having to make up the swallowed distance first.
+            double factor = IsFineAdjustment ? FineAdjustmentFactor : 1.0;
+            return currentPos + rawIncrement * factor;
+        }
+
         private void PART_MinThumb_DragDelta(object sender, DragDeltaEventArgs e)
         {
             double delta = IsVertical ? e.VerticalChange : e.HorizontalChange;
-            double newPos = ValueToPosition(LowerValue) + delta;
-            LowerValue = PositionToValue(newPos); // coercion keeps it <= UpperValue - MinimumRange
+            double currentPos = ValueToPosition(LowerValue);
+            LowerValue = PositionToValue(ComputeDragPosition(currentPos, delta)); // coercion keeps it <= UpperValue - MinimumRange
         }
 
         private void PART_MaxThumb_DragDelta(object sender, DragDeltaEventArgs e)
         {
             double delta = IsVertical ? e.VerticalChange : e.HorizontalChange;
-            double newPos = ValueToPosition(UpperValue) + delta;
-            UpperValue = PositionToValue(newPos); // coercion keeps it >= LowerValue + MinimumRange
+            double currentPos = ValueToPosition(UpperValue);
+            UpperValue = PositionToValue(ComputeDragPosition(currentPos, delta)); // coercion keeps it >= LowerValue + MinimumRange
         }
 
         // Double-clicking a handle snaps it back to its configured default, if any.
