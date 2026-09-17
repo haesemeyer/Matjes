@@ -83,9 +83,9 @@ namespace Hamamatsu.Dcam
         }
 
         // Setup for Hardware Sync (External Edge Trigger)
-        public void ConfigureHardwareTrigger(double exposureTimeSec)
+        public void ConfigureHardwareTrigger()
         {
-            SetProperty(DcamNative.DCAM_IDPROP_EXPOSURETIME, exposureTimeSec);
+            //SetProperty(DcamNative.DCAM_IDPROP_EXPOSURETIME, exposureTimeSec);
 
             // 1 = Internal, 2 = External. Set to External for Hardware Sync.
             SetProperty(DcamNative.DCAM_IDPROP_TRIGGERSOURCE, (int)DcamNative.DCAM_TRIGGERSOURCE.DCAMPROP_TRIGGERSOURCE__EXTERNAL);
