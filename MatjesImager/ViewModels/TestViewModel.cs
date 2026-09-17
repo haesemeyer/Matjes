@@ -128,7 +128,8 @@ namespace MatjesImager.ViewModels
         private NationalInstruments.DAQmx.Task? _aoTask_Z;
 
         // Analog control channels
-        private string _counterChannel = "Dev1/ctr0";
+        private string _counterChannel = "Dev2/ctr0";
+        private string _counterOutput_terminal = "/Dev2/PFI0";
         private string _sheet1Channel = "Dev1/ao0";
         private string _sheet2Channel = "Dev1/ao2";
 
@@ -166,13 +167,7 @@ namespace MatjesImager.ViewModels
                 _camera.SetReadoutSpeed(DcamNative.DCAM_READOUT_SPEED.DCAMPROP_READOUT_SPEED_FAST);
                 _camera.SetROI(xOffset: 0, yOffset: 160, width: 2304, height: 2048);
 
-                // 2. Configure Camera hardware trigger
-                double exposureTime = (1.0 / frameRateHz);
-                exposureTime -= exposureTime * 0.1;  // shorten 10% to give time for readout; might need to adjust this fraction
-                
-                //TODO: Change back to re-activate hardware trigger!
-                //_camera.ConfigureHardwareTrigger(exposureTime);
-                _camera.ConfigureInternalTrigger(exposureTime);
+                _camera.ConfigureHardwareTrigger();
 
                 // 3. Setup Analog Output Task for Mirrors
                 _aoTask_sheet = new NationalInstruments.DAQmx.Task();
@@ -189,11 +184,10 @@ namespace MatjesImager.ViewModels
 
                 double[,] waveformBuffer = GenerateTriangleBuffer(_samplesPerFrame, _sweepsPerFrame, Sheet1LeftVolts, Sheet1RightVolts, Sheet2LeftVolts, Sheet2RightVolts);
                 _aoTask_sheet.Timing.ConfigureSampleClock("", aoSampleRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, _samplesPerFrame);
-                _aoTask_sheet.Triggers.StartTrigger.ConfigureDigitalEdgeTrigger($"/Dev1/ctr0InternalOutput", DigitalEdgeStartTriggerEdge.Rising);
 
                 double[,] z_fixed_buffer = GenerateZBuffer(_samplesPerFrame);
                 _aoTask_Z.Timing.ConfigureSampleClock("", aoSampleRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, _samplesPerFrame);
-                //_aoTask_Z.Triggers.StartTrigger.ConfigureDigitalEdgeTrigger($"/Dev1/ctr0InternalOutput", DigitalEdgeStartTriggerEdge.Rising);
+                _aoTask_Z.Triggers.StartTrigger.ConfigureDigitalEdgeTrigger($"/Dev2/ctr0InternalOutput", DigitalEdgeStartTriggerEdge.Rising);
 
                 AnalogMultiChannelWriter sheetWriter = new AnalogMultiChannelWriter(_aoTask_sheet.Stream);
                 sheetWriter.WriteMultiSample(false, waveformBuffer);
@@ -204,6 +198,7 @@ namespace MatjesImager.ViewModels
                 // 4. Setup Counter Output Task for Camera Trigger
                 _counterTask = new NationalInstruments.DAQmx.Task();
                 _counterTask.COChannels.CreatePulseChannelFrequency(_counterChannel, "CameraTrigger", COPulseFrequencyUnits.Hertz, COPulseIdleState.Low, 0.0, frameRateHz, 0.5);
+                _counterTask.ExportSignals.ExportHardwareSignal(ExportSignal.CounterOutputEvent, _counterOutput_terminal);
                 _counterTask.Timing.ConfigureImplicit(SampleQuantityMode.ContinuousSamples);
 
                 // 5. Allocate Buffers and Arm Camera
