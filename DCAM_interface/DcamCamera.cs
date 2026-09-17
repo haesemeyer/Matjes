@@ -91,7 +91,9 @@ namespace Hamamatsu.Dcam
             SetProperty(DcamNative.DCAM_IDPROP_TRIGGERSOURCE, (int)DcamNative.DCAM_TRIGGERSOURCE.DCAMPROP_TRIGGERSOURCE__EXTERNAL);
 
             // 1 = Edge, 2 = Level, 3 = Synchronous Readout
-            SetProperty(DcamNative.DCAM_IDPROP_TRIGGERACTIVE, (int)DcamNative.DCAM_TRIGGERACTIVE.DCAMPROP_TRIGGERACTIVE__EDGE);
+            SetProperty(DcamNative.DCAM_IDPROP_TRIGGERACTIVE, (int)DcamNative.DCAM_TRIGGERACTIVE.DCAMPROP_TRIGGERACTIVE__SYNCREADOUT);
+
+            SetProperty(DcamNative.DCAM_IDPROP_TRIGGERMODE, (int)DcamNative.DCAM_TRIGGERMODE.DCAMPROP_TRIGGER_MODE__NORMAL);
         }
 
         public void ConfigureInternalTrigger(double exposureTimeSec)
