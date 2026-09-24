@@ -1,0 +1,18 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: Matjes
+message: >-
+  C# based software for control of a light-sheet microscope.
+type: software
+authors:
+  - given-names: Martin
+    family-names: Haesemeyer
+    email: haesemeyer.1@osu.edu
+    affiliation: The Ohio State University
+    orcid: 'https://orcid.org/0000-0003-2704-3601'
+repository-code: 'https://github.com/haesemeyer/Matjes'
+abstract: >
+  Matjes is intended as a control software for a light-sheet microscope. It will likely be fairly heavily tailored to lab applications, but should be of general usability with some tweaks.
+license: MIT
