@@ -74,10 +74,10 @@ namespace MatjesImager.ViewModels
         public double Piezo_Fixed
         {
             get { return _piezo_fixed; }
-            set { _piezo_fixed = value; RaisePropertyChanged(nameof(Piezo_Fixed)); RaisePropertyChanged(nameof(Pieze_Microns)); }
+            set { _piezo_fixed = value; RaisePropertyChanged(nameof(Piezo_Fixed)); RaisePropertyChanged(nameof(Piezo_Microns)); }
         }
 
-        public string Pieze_Microns
+        public string Piezo_Microns
         {
             get { return string.Format("{0:F2} uM", _piezo_fixed * 45); }
         }
