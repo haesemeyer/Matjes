@@ -1,5 +1,6 @@
 ﻿using Hamamatsu.Dcam;
 using Hamamatsu.Native;
+using MatjesImager.Hardware;
 using MatjesUtils;
 using NationalInstruments.DAQmx;
 using System;
@@ -114,6 +115,14 @@ namespace MatjesImager.ViewModels
             set { _image_scale_max = value; RaisePropertyChanged(nameof(ImageScaleMax));}
         }
 
+        private ScanControl _scanhead;
+
+        public ScanControl Scanhead
+        {
+            get { return _scanhead; }
+            private set { _scanhead = value; }
+        }
+
         Image8? _camImage;
 
         Image16? _camImage16;
@@ -121,26 +130,6 @@ namespace MatjesImager.ViewModels
         private DcamCamera? _camera; // Using our custom P/Invoke wrapper
         private bool _isAcquiring = false;
         private CancellationTokenSource? _cancellationTokenSource;
-
-        // NI-DAQmx Tasks
-        private NationalInstruments.DAQmx.Task? _counterTask;
-        private NationalInstruments.DAQmx.Task? _aoTask_sheet;
-        private NationalInstruments.DAQmx.Task? _aoTask_Z;
-
-        // Analog control channels
-        private string _counterChannel = "Dev2/ctr0";
-        private string _counterOutput_terminal = "/Dev2/PFI0";
-        private string _sheet1Channel = "Dev1/ao0";
-        private string _sheet2Channel = "Dev1/ao2";
-
-        private string _z1Channel = "Dev2/ao1";
-
-        private string _z2Channel = "Dev2/ao2";
-
-        private string _piezoChannel = "Dev2/ao0";
-
-        private int _samplesPerFrame = 1000;
-        private int _sweepsPerFrame = 2;
 
         public TestViewModel() {
             Sheet1LeftVolts = -1;
@@ -150,116 +139,42 @@ namespace MatjesImager.ViewModels
             Z1_Fixed = 0;
             Z2_Fixed = 0;
             Piezo_Fixed = 0;
+            Scanhead = new ScanControl();
             if (IsInDesignMode)
                 return;
             _camDisplay = new EZImageSource_LH();
-            StartAcquisition(100);
+            StartAcquisition();
+            // Camera is now armed, start scanhead
+            Scanhead.StartIdleScan(100);
         }
 
-        public void StartAcquisition(double frameRateHz)
+        /// <summary>
+        /// Starts camera acquisition - note acquisition has to be started and armed before starting the Scanhead
+        /// </summary>
+        public void StartAcquisition()
         {
             try
             {
-                // 1. Initialize Camera using custom wrapper
+                // Initialize Camera
                 _camera = new DcamCamera(0);
-
                 _camera.SetPixelType(DcamNative.DCAM_PIXELTYPE.DCAM_PIXELTYPE_MONO16);
                 _camera.SetReadoutSpeed(DcamNative.DCAM_READOUT_SPEED.DCAMPROP_READOUT_SPEED_FAST);
                 _camera.SetROI(xOffset: 0, yOffset: 160, width: 2304, height: 2048);
-
                 _camera.ConfigureHardwareTrigger();
-
-                // 3. Setup Analog Output Task for Mirrors
-                _aoTask_sheet = new NationalInstruments.DAQmx.Task();
-                _aoTask_sheet.AOChannels.CreateVoltageChannel(_sheet1Channel, "MirrorX1", -5, 5, AOVoltageUnits.Volts);
-                _aoTask_sheet.AOChannels.CreateVoltageChannel(_sheet2Channel, "MirrorX2", -5, 5, AOVoltageUnits.Volts);
-
-                _aoTask_Z = new NationalInstruments.DAQmx.Task();
-                _aoTask_Z.AOChannels.CreateVoltageChannel(_z1Channel, "MirrorY1", -5, 5, AOVoltageUnits.Volts);
-                _aoTask_Z.AOChannels.CreateVoltageChannel(_z2Channel, "MirrorY2", -5, 5, AOVoltageUnits.Volts);
-                _aoTask_Z.AOChannels.CreateVoltageChannel(_piezoChannel, "Piezo", 0, 10, AOVoltageUnits.Volts);
-
-
-                double aoSampleRate = frameRateHz * _samplesPerFrame;
-
-                double[,] waveformBuffer = GenerateTriangleBuffer(_samplesPerFrame, _sweepsPerFrame, Sheet1LeftVolts, Sheet1RightVolts, Sheet2LeftVolts, Sheet2RightVolts);
-                _aoTask_sheet.Timing.ConfigureSampleClock("", aoSampleRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, _samplesPerFrame);
-
-                double[,] z_fixed_buffer = GenerateZBuffer(_samplesPerFrame);
-                _aoTask_Z.Timing.ConfigureSampleClock("", aoSampleRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, _samplesPerFrame);
-                _aoTask_Z.Triggers.StartTrigger.ConfigureDigitalEdgeTrigger($"/Dev2/ctr0InternalOutput", DigitalEdgeStartTriggerEdge.Rising);
-
-                AnalogMultiChannelWriter sheetWriter = new AnalogMultiChannelWriter(_aoTask_sheet.Stream);
-                sheetWriter.WriteMultiSample(false, waveformBuffer);
-
-                AnalogMultiChannelWriter zWriter = new AnalogMultiChannelWriter(_aoTask_Z.Stream);
-                zWriter.WriteMultiSample(false, z_fixed_buffer);
-
-                // 4. Setup Counter Output Task for Camera Trigger
-                _counterTask = new NationalInstruments.DAQmx.Task();
-                _counterTask.COChannels.CreatePulseChannelFrequency(_counterChannel, "CameraTrigger", COPulseFrequencyUnits.Hertz, COPulseIdleState.Low, 0.0, frameRateHz, 0.5);
-                _counterTask.ExportSignals.ExportHardwareSignal(ExportSignal.CounterOutputEvent, _counterOutput_terminal);
-                _counterTask.Timing.ConfigureImplicit(SampleQuantityMode.ContinuousSamples);
-
-                // 5. Allocate Buffers and Arm Camera
+                // Allocate Buffers and Arm Camera
                 _camera.AllocateBuffer(10);
                 _camera.StartCapture(DcamNative.DCAMCAP_START.SEQUENCE);
-
+                // Acknowledge acquisition and generate cancelletation token
                 _isAcquiring = true;
                 _cancellationTokenSource = new CancellationTokenSource();
-
-                // 6. Start AO task (enters armed state waiting for ctr0 pulse)
-                _aoTask_sheet.Start();
-                _aoTask_Z.Start();
-
-                // 7. Launch image receiving thread
+                // Launch image receiving thread - NOTE: The camera will wait on the counter due to triggering
                 System.Threading.Tasks.Task.Run(() => AcquisitionLoop(_cancellationTokenSource.Token));
-
-                System.Threading.Tasks.Task.Run(() => SheetLoop(_cancellationTokenSource.Token));
-
-                // 8. Start Counter Task LAST (fires everything synchronously)
-                _counterTask.Start();
             }
             catch (Exception)
             {
                 Cleanup();
                 throw;
             }
-        }
-
-        private double[,] GenerateTriangleBuffer(int totalSamples, int cycles, double vMin1, double vMax1, double vMin2, double vMax2)
-        {
-            double[,] buffer = new double[2, totalSamples];
-            int samplesPerCycle = totalSamples / cycles;
-            double voltage;
-
-            for (int i = 0; i < totalSamples; i++)
-            {
-                int cycleSample = i % samplesPerCycle;
-                double phase = (double)cycleSample / samplesPerCycle;
-
-                voltage = phase < 0.5
-                    ? vMin1 + (vMax1 - vMin1) * (phase * 2.0)
-                    : vMax1 - (vMax1 - vMin1) * ((phase - 0.5) * 2.0);
-                buffer[0, i] = voltage;
-                voltage = phase < 0.5
-                    ? vMin2 + (vMax2 - vMin2) * (phase * 2.0)
-                    : vMax2 - (vMax2 - vMin2) * ((phase - 0.5) * 2.0);
-                buffer[1, i] = voltage;
-            }
-            return buffer;
-        }
-
-        private double[,] GenerateZBuffer(int totalSamples)
-        {
-            double[,] buffer = new double[3, totalSamples];
-            for (int i = 0; i < totalSamples; i++)
-            {
-                buffer[0, i] = Z1_Fixed;
-                buffer[1, i] = Z2_Fixed;
-                buffer[2, i] = Piezo_Fixed;
-            }
-            return buffer;
         }
 
         private void AcquisitionLoop(CancellationToken token)
@@ -317,29 +232,11 @@ namespace MatjesImager.ViewModels
             }
         }
 
-        private void SheetLoop(CancellationToken token)
-        {
-            double[,] waveformBuffer;
-            double[,] zBuffer;
-            AnalogMultiChannelWriter sheetWriter = new AnalogMultiChannelWriter(_aoTask_sheet.Stream);
-            AnalogMultiChannelWriter zWriter = new AnalogMultiChannelWriter(_aoTask_Z.Stream);
-            while (_isAcquiring && !token.IsCancellationRequested)
-            {
-                waveformBuffer = GenerateTriangleBuffer(_samplesPerFrame, _sweepsPerFrame, Sheet1LeftVolts, Sheet1RightVolts, Sheet2LeftVolts, Sheet2RightVolts);
-                sheetWriter.WriteMultiSample(false, waveformBuffer);
-                zBuffer = GenerateZBuffer(_samplesPerFrame);
-                zWriter.WriteMultiSample(false, zBuffer);
-                Thread.Sleep(100);
-            }
-        }
-
         public void StopAcquisition()
         {
             _isAcquiring = false;
+            Scanhead.Stop();
             _cancellationTokenSource?.Cancel();
-
-            _counterTask?.Stop();
-            _aoTask_sheet?.Stop();
 
             if (_camera != null)
             {
@@ -350,8 +247,7 @@ namespace MatjesImager.ViewModels
 
         private void Cleanup()
         {
-            _counterTask?.Dispose();
-            _aoTask_sheet?.Dispose();
+            Scanhead.Dispose();
 
             _camera?.Dispose();
             _camera = null;
