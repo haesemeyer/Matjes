@@ -2,10 +2,15 @@
 using NationalInstruments.DAQmx;
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace MatjesImager.Hardware
 {
+    /// <summary>
+    /// Class to represent all scan, objective, and camera control operations, which need to be synchronized
+    /// We make the (reasonable) assumption that the volume rate will always be a divisor of the frame rate
+    /// </summary>
     public class ScanControl : PropertyChangeNotification, IDisposable
     {
         #region Members
@@ -78,14 +83,9 @@ namespace MatjesImager.Hardware
         private NationalInstruments.DAQmx.Task? _aoTask_Z;
 
         /// <summary>
-        /// The number of ao samples to generate for each camera frame
-        /// </summary>
-        private const int _samplesPerFrame = 1000;
-
-        /// <summary>
         /// The number of sweeps on the sheet generating mirrors to perform per camera frame
         /// </summary>
-        private const int _sweepsPerFrame = 2;
+        private const int _sweepsPerFrame = 4;
 
         /// <summary>
         /// Sample writer object for sheet task
@@ -96,6 +96,11 @@ namespace MatjesImager.Hardware
         /// Sample writer objectg for z control task
         /// </summary>
         private AnalogMultiChannelWriter? _zWriter;
+
+        /// <summary>
+        /// The calculated current sample rate across all tasks and devices
+        /// </summary>
+        private double _sampleRate;
 
         // Analog control channel definitions before these move into properties
         private const string _counterChannel = "Dev2/ctr0";
@@ -109,7 +114,10 @@ namespace MatjesImager.Hardware
 
         private const string _piezoChannel = "Dev2/ao0";
 
-        private const double _aoSampleRate = 210000; // A convenient number that is divisible by 2, 3, 5, 7, and 1000
+        /// <summary>
+        /// The number of ao samples to generate for each camera frame
+        /// </summary>
+        private const int _samplesPerFrame = 1000;
 
 
         #endregion
@@ -220,7 +228,7 @@ namespace MatjesImager.Hardware
             _aoTask_sheet = new NationalInstruments.DAQmx.Task();
             _aoTask_sheet.AOChannels.CreateVoltageChannel(_sheet1Channel, "MirrorX1", -5, 5, AOVoltageUnits.Volts);
             _aoTask_sheet.AOChannels.CreateVoltageChannel(_sheet2Channel, "MirrorX2", -5, 5, AOVoltageUnits.Volts);
-            _aoTask_sheet.Timing.ConfigureSampleClock("", _aoSampleRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, _samplesPerFrame);
+            _aoTask_sheet.Timing.ConfigureSampleClock("", _sampleRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, _samplesPerFrame);
             // TODO: Make determination whether there is a reason to synchronize these tasks to the frame and z-clock
 
             _sheetWriter = new AnalogMultiChannelWriter(_aoTask_sheet.Stream);
@@ -229,7 +237,7 @@ namespace MatjesImager.Hardware
             _aoTask_Z.AOChannels.CreateVoltageChannel(_z1Channel, "MirrorY1", -5, 5, AOVoltageUnits.Volts);
             _aoTask_Z.AOChannels.CreateVoltageChannel(_z2Channel, "MirrorY2", -5, 5, AOVoltageUnits.Volts);
             _aoTask_Z.AOChannels.CreateVoltageChannel(_piezoChannel, "Piezo", 0, 10, AOVoltageUnits.Volts);
-            _aoTask_Z.Timing.ConfigureSampleClock("", _aoSampleRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, _samplesPerFrame);
+            _aoTask_Z.Timing.ConfigureSampleClock("", _sampleRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, _samplesPerFrame);
             _aoTask_Z.Triggers.StartTrigger.ConfigureDigitalEdgeTrigger($"/Dev2/ctr0InternalOutput", DigitalEdgeStartTriggerEdge.Rising);
 
             _zWriter = new AnalogMultiChannelWriter(_aoTask_Z.Stream);
@@ -247,6 +255,7 @@ namespace MatjesImager.Hardware
         /// <param name="frameRateHz">The desired camera framerate in Hz</param>
         public void StartIdleScan(int frameRateHz)
         {
+            _sampleRate = frameRateHz * _samplesPerFrame;
             _isRunning = true;
             _cancellationTokenSource = new CancellationTokenSource();
             double aoSampleRate = frameRateHz * _samplesPerFrame;
@@ -304,13 +313,10 @@ namespace MatjesImager.Hardware
                 int cycleSample = i % samplesPerCycle;
                 double phase = (double)cycleSample / samplesPerCycle;
 
-                voltage = phase < 0.5
-                    ? Sheet1LeftVolts + (Sheet1RightVolts - Sheet1LeftVolts) * (phase * 2.0)
-                    : Sheet1RightVolts - (Sheet1RightVolts - Sheet1LeftVolts) * ((phase - 0.5) * 2.0);
+                voltage = Sheet1LeftVolts + ScanWaveforms.SmoothTriangle(phase, 0.1) * (Sheet1RightVolts - Sheet1LeftVolts);
                 buffer[0, i] = voltage;
-                voltage = phase < 0.5
-                    ? Sheet2LeftVolts + (Sheet2RightVolts - Sheet2LeftVolts) * (phase * 2.0)
-                    : Sheet2RightVolts - (Sheet2RightVolts - Sheet2LeftVolts) * ((phase - 0.5) * 2.0);
+
+                voltage = Sheet2LeftVolts + ScanWaveforms.SmoothTriangle(phase, 0.1) * (Sheet2RightVolts - Sheet2LeftVolts);
                 buffer[1, i] = voltage;
             }
             return buffer;
