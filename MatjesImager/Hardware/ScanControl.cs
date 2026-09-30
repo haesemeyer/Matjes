@@ -262,7 +262,6 @@ namespace MatjesImager.Hardware
             _isRunning = true;
             _cancellationTokenSource?.Dispose();
             _cancellationTokenSource = new CancellationTokenSource();
-            double aoSampleRate = frameRateHz * _samplesPerFrame;
             NITaskSetup(frameRateHz);
             // NOTE: Since we regenerate samples, we do not have to care about the size of the write buffer that requires more consideration for scanning
             double[,] sheetBuffer = GenerateSheetTriangleBuffer(_samplesPerFrame, _sweepsPerFrame);
