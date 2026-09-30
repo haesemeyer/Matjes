@@ -253,10 +253,14 @@ namespace MatjesImager.Hardware
         /// Starts the scan system in idle/direct user control mode, i.e. no automated z-scanning will be performed
         /// </summary>
         /// <param name="frameRateHz">The desired camera framerate in Hz</param>
+        /// <exception cref="InvalidOperationException">Raises InvalidOperationException if called while scan is running</exception>
         public void StartIdleScan(int frameRateHz)
         {
+            if (_isRunning)
+                throw new InvalidOperationException("Invoked StartIdleScan while ScanControl is running");
             _sampleRate = frameRateHz * _samplesPerFrame;
             _isRunning = true;
+            _cancellationTokenSource?.Dispose();
             _cancellationTokenSource = new CancellationTokenSource();
             double aoSampleRate = frameRateHz * _samplesPerFrame;
             NITaskSetup(frameRateHz);
@@ -274,6 +278,16 @@ namespace MatjesImager.Hardware
             _counterTask.Start();
         }
 
+        public void StartZScan(int frameRateHz, int volumeRate)
+        {
+            if (_isRunning)
+                throw new InvalidOperationException("Invoked StartZScan while ScanControl is running");
+            _sampleRate = frameRateHz * _samplesPerFrame;
+            _isRunning = true;
+            _cancellationTokenSource?.Dispose();
+            _cancellationTokenSource = new CancellationTokenSource();
+        }    
+
         public void Stop()
         {
             if (!_isRunning)
@@ -290,6 +304,7 @@ namespace MatjesImager.Hardware
             _aoTask_Z = null;
             _sheetWriter = null;
             _zWriter = null;
+            _isRunning = false;
         }
 
         /// <summary>
