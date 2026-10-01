@@ -103,16 +103,19 @@ namespace MatjesImager.Hardware
         private double _sampleRate;
 
         // Analog control channel definitions before these move into properties
-        private const string _counterChannel = "Dev2/ctr0";
-        private const string _counterOutput_terminal = "/Dev2/PFI0";
-        private const string _sheet1Channel = "Dev1/ao0";
-        private const string _sheet2Channel = "Dev1/ao2";
+        private const string sheetBoard = "Dev1";
+        private const string zAndCamBoard = "Dev2";
+        private const string counterIndex = "0";
+        private const string counterChannel = $"{zAndCamBoard}/ctr{counterIndex}";
+        private const string counterOutput_terminal = $"/{zAndCamBoard}/PFI0";
+        private const string sheet1Channel = $"{sheetBoard}/ao0";
+        private const string sheet2Channel = $"{sheetBoard}/ao2";
 
-        private const string _z1Channel = "Dev2/ao1";
+        private const string z1Channel = $"{zAndCamBoard}/ao1";
 
-        private const string _z2Channel = "Dev2/ao2";
+        private const string z2Channel = $"{zAndCamBoard}/ao2";
 
-        private const string _piezoChannel = "Dev2/ao0";
+        private const string piezoChannel = $"{zAndCamBoard}/ao0";
 
         /// <summary>
         /// The number of ao samples to generate for each camera frame
@@ -226,26 +229,26 @@ namespace MatjesImager.Hardware
 
             // Setup of analog tasks for mirror and piezo control
             _aoTask_sheet = new NationalInstruments.DAQmx.Task();
-            _aoTask_sheet.AOChannels.CreateVoltageChannel(_sheet1Channel, "MirrorX1", -5, 5, AOVoltageUnits.Volts);
-            _aoTask_sheet.AOChannels.CreateVoltageChannel(_sheet2Channel, "MirrorX2", -5, 5, AOVoltageUnits.Volts);
+            _aoTask_sheet.AOChannels.CreateVoltageChannel(sheet1Channel, "MirrorX1", -5, 5, AOVoltageUnits.Volts);
+            _aoTask_sheet.AOChannels.CreateVoltageChannel(sheet2Channel, "MirrorX2", -5, 5, AOVoltageUnits.Volts);
             _aoTask_sheet.Timing.ConfigureSampleClock("", _sampleRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, _samplesPerFrame);
             // TODO: Make determination whether there is a reason to synchronize these tasks to the frame and z-clock
 
             _sheetWriter = new AnalogMultiChannelWriter(_aoTask_sheet.Stream);
 
             _aoTask_Z = new NationalInstruments.DAQmx.Task();
-            _aoTask_Z.AOChannels.CreateVoltageChannel(_z1Channel, "MirrorY1", -5, 5, AOVoltageUnits.Volts);
-            _aoTask_Z.AOChannels.CreateVoltageChannel(_z2Channel, "MirrorY2", -5, 5, AOVoltageUnits.Volts);
-            _aoTask_Z.AOChannels.CreateVoltageChannel(_piezoChannel, "Piezo", 0, 10, AOVoltageUnits.Volts);
+            _aoTask_Z.AOChannels.CreateVoltageChannel(z1Channel, "MirrorY1", -5, 5, AOVoltageUnits.Volts);
+            _aoTask_Z.AOChannels.CreateVoltageChannel(z2Channel, "MirrorY2", -5, 5, AOVoltageUnits.Volts);
+            _aoTask_Z.AOChannels.CreateVoltageChannel(piezoChannel, "Piezo", 0, 10, AOVoltageUnits.Volts);
             _aoTask_Z.Timing.ConfigureSampleClock("", _sampleRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, _samplesPerFrame);
-            _aoTask_Z.Triggers.StartTrigger.ConfigureDigitalEdgeTrigger($"/Dev2/ctr0InternalOutput", DigitalEdgeStartTriggerEdge.Rising);
+            _aoTask_Z.Triggers.StartTrigger.ConfigureDigitalEdgeTrigger($"/{zAndCamBoard}/ctr{counterIndex}InternalOutput", DigitalEdgeStartTriggerEdge.Rising);
 
             _zWriter = new AnalogMultiChannelWriter(_aoTask_Z.Stream);
 
             // Setup Counter Output Task for Camera Trigger
             _counterTask = new NationalInstruments.DAQmx.Task();
-            _counterTask.COChannels.CreatePulseChannelFrequency(_counterChannel, "CameraTrigger", COPulseFrequencyUnits.Hertz, COPulseIdleState.Low, 0.0, frameRateHz, 0.5);
-            _counterTask.ExportSignals.ExportHardwareSignal(ExportSignal.CounterOutputEvent, _counterOutput_terminal);
+            _counterTask.COChannels.CreatePulseChannelFrequency(counterChannel, "CameraTrigger", COPulseFrequencyUnits.Hertz, COPulseIdleState.Low, 0.0, frameRateHz, 0.5);
+            _counterTask.ExportSignals.ExportHardwareSignal(ExportSignal.CounterOutputEvent, counterOutput_terminal);
             _counterTask.Timing.ConfigureImplicit(SampleQuantityMode.ContinuousSamples);
         }
 
