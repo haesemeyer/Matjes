@@ -22,6 +22,18 @@
     <Reference Include="NationalInstruments.DAQmx">
       <HintPath>..\..\..\..\..\..\..\Program Files (x86)\National Instruments\MeasurementStudioVS2012\DotNET\Assemblies (64-bit)\Current\NationalInstruments.DAQmx.dll</HintPath>
     </Reference>
+    <Reference Include="ThorLabs.MotionControl.Benchtop.PrecisionPiezoCLI">
+      <HintPath>..\..\..\..\..\..\..\Program Files\Thorlabs\Kinesis\ThorLabs.MotionControl.Benchtop.PrecisionPiezoCLI.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Thorlabs.MotionControl.DeviceManagerCLI">
+      <HintPath>..\..\..\..\..\..\..\Program Files\Thorlabs\Kinesis\Thorlabs.MotionControl.DeviceManagerCLI.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Thorlabs.MotionControl.GenericPiezoCLI">
+      <HintPath>..\..\..\..\..\..\..\Program Files\Thorlabs\Kinesis\Thorlabs.MotionControl.GenericPiezoCLI.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
   </ItemGroup>
 
 </Project>

@@ -142,6 +142,8 @@ namespace MatjesImager.ViewModels
             Scanhead = new ScanControl();
             if (IsInDesignMode)
                 return;
+            // TODO: Before connecting to Piezo we need to write 0V to the Piezo AO
+            PiezoConfig.ConfigurePPC001("44506384");// Set Closed loop, external BNC control and corrected position report on Piezo
             _camDisplay = new EZImageSource_LH();
             StartAcquisition();
             // Camera is now armed, start scanhead
