@@ -288,7 +288,33 @@ namespace MatjesImager.Hardware
             _isRunning = true;
             _cancellationTokenSource?.Dispose();
             _cancellationTokenSource = new CancellationTokenSource();
-        }    
+        }
+        
+        /// <summary>
+        /// If no scan is running, sets all analog outputs to 0
+        /// </summary>
+        public void SetAllAOZero()
+        {
+            if (_isRunning)
+                throw new InvalidOperationException("Attempted SetAllZero while ScanControl is running");
+            var aoTask_sheet = new NationalInstruments.DAQmx.Task();
+            aoTask_sheet.AOChannels.CreateVoltageChannel(sheet1Channel, "MirrorX1", -5, 5, AOVoltageUnits.Volts);
+            aoTask_sheet.AOChannels.CreateVoltageChannel(sheet2Channel, "MirrorX2", -5, 5, AOVoltageUnits.Volts);
+
+            var sheetWriter = new AnalogMultiChannelWriter(aoTask_sheet.Stream);
+            sheetWriter.WriteSingleSample(true, [0, 0]);
+
+            var aoTask_Z = new NationalInstruments.DAQmx.Task();
+            aoTask_Z.AOChannels.CreateVoltageChannel(z1Channel, "MirrorY1", -5, 5, AOVoltageUnits.Volts);
+            aoTask_Z.AOChannels.CreateVoltageChannel(z2Channel, "MirrorY2", -5, 5, AOVoltageUnits.Volts);
+            aoTask_Z.AOChannels.CreateVoltageChannel(piezoChannel, "Piezo", 0, 10, AOVoltageUnits.Volts);
+
+            var zWriter = new AnalogMultiChannelWriter(aoTask_Z.Stream);
+            zWriter.WriteSingleSample(true, [0, 0, 0]);
+
+            aoTask_sheet.Dispose();
+            aoTask_Z.Dispose();
+        }
 
         public void Stop()
         {
