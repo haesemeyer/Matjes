@@ -36,5 +36,10 @@ namespace MatjesImager.Views
             _viewModel?.Dispose();
             base.WindowClosing(sender, e);
         }
+
+        private void Button_Click(object sender, RoutedEventArgs e)
+        {
+            _viewModel?.StartZScan();
+        }
     }
 }

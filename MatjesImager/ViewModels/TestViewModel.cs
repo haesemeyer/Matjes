@@ -139,7 +139,7 @@ namespace MatjesImager.ViewModels
             Z1_Fixed = 0;
             Z2_Fixed = 0;
             Piezo_Fixed = 0;
-            Scanhead = new ScanControl();
+            Scanhead = new ScanControl(new LinearZConverter(-4.0/450, 2, 10, -10), new LinearZConverter(-4.0/450, 2, 10, -10));
             if (IsInDesignMode)
                 return;
             // TODO: Before connecting to Piezo we need to write 0V to the Piezo AO
@@ -149,6 +149,14 @@ namespace MatjesImager.ViewModels
             StartAcquisition();
             // Camera is now armed, start scanhead
             Scanhead.StartIdleScan(100);
+        }
+
+        public void StartZScan()
+        {
+            StopAcquisition();
+            Scanhead.Stop();
+            StartAcquisition();
+            Scanhead.StartZScan(100, 1);
         }
 
         /// <summary>
@@ -245,6 +253,7 @@ namespace MatjesImager.ViewModels
             {
                 _camera.StopCapture();
                 _camera.ReleaseBuffer();
+                _camera.Dispose();
             }
         }
 

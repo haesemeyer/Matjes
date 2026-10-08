@@ -3,6 +3,7 @@ using NationalInstruments.DAQmx;
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Security.RightsManagement;
 using System.Text;
 
 namespace MatjesImager.Hardware
@@ -102,6 +103,37 @@ namespace MatjesImager.Hardware
         /// </summary>
         private double _sampleRate;
 
+        /// <summary>
+        /// Counts the total number of generated samples for the sheet waveforms
+        /// </summary>
+        private long _sheet_sample_index = 0;
+
+        /// <summary>
+        /// Counts the total number of generated samples for the z waveforms
+        /// </summary>
+        private long _z_sample_index = 0;
+
+        /// <summary>
+        /// Determines the total number of samples to generate for the ao waveforms
+        /// in each generation cycle - this number can be independent of wave periods
+        /// </summary>
+        private int _samples_to_generate;
+
+        /// <summary>
+        /// The number of samples within one period of our z-sweep
+        /// </summary>
+        private int _z_period_samples;
+
+        /// <summary>
+        /// Our converter that translates Piezo z-positions to mirror z-voltages for sheet 1
+        /// </summary>
+        private IConvertZPosition _convertZPosition_sheet1;
+
+        /// <summary>
+        /// Our converter that translates Piezo z-positions to mirror z-voltages for sheet 2
+        /// </summary>
+        private IConvertZPosition _convertZPosition_sheet2;
+
         // Analog control channel definitions before these move into properties
         private const string sheetBoard = "Dev1";
         private const string zAndCamBoard = "Dev2";
@@ -117,16 +149,27 @@ namespace MatjesImager.Hardware
 
         private const string piezoChannel = $"{zAndCamBoard}/ao0";
 
+        private const double sheetTurnAround = 0.1;
+
+        private const double piezoSawtoothShape = 0.9;
+
         /// <summary>
         /// The number of ao samples to generate for each camera frame
         /// </summary>
         private const int _samplesPerFrame = 1000;
 
+        /// <summary>
+        /// The buffer size on our AO tasks will be generated_samples x _buffer_mult in size
+        /// </summary>
+        private const int _buffer_mult = 2;
+
 
         #endregion
 
-        public ScanControl()
+        public ScanControl(IConvertZPosition z_converter_sheet1, IConvertZPosition z_converter_sheet2)
         {
+            ArgumentNullException.ThrowIfNull(z_converter_sheet1, nameof(z_converter_sheet1));
+            ArgumentNullException.ThrowIfNull(z_converter_sheet2, nameof(z_converter_sheet2));
             Sheet1LeftVolts = -1;
             Sheet2LeftVolts = -0.5;
             Sheet1RightVolts = 1;
@@ -134,6 +177,8 @@ namespace MatjesImager.Hardware
             Z1_Fixed = 0;
             Z2_Fixed = 0;
             Piezo_Fixed_Microns = 0;
+            _convertZPosition_sheet1 = z_converter_sheet1;
+            _convertZPosition_sheet2 = z_converter_sheet2;
         }
 
         #region Properties
@@ -211,11 +256,50 @@ namespace MatjesImager.Hardware
             double[,] zBuffer;
             while (_isRunning && !token.IsCancellationRequested)
             {
-                sheetBuffer = GenerateSheetTriangleBuffer(_samplesPerFrame, _sweepsPerFrame);
+                // To prevent buffer over-runs, which can lead to discontinuities, we wait until space for a full set of samples
+                // is available in the bufffer, which we have configured to be twice the generated sample size.
+                // Note: Our Z and sheet tasks are not synchronized. Therefore, for experimental loops we need to separate the threads and wait
+                // on available samples independently to avoid jitter. However, for the idle loop we simply wait on the sheet and allow for jitter
+                // on z in cases where the task is lagging behind in generation
+                try { WaitForAOSpace(_aoTask_sheet.Stream, token); }
+                catch (OperationCanceledException) { break;  }
+                    
+                sheetBuffer = GenerateSheetTriangleBuffer(_samples_to_generate);
                 _sheetWriter.WriteMultiSample(false, sheetBuffer);
-                zBuffer = GenerateStaticZBuffer(_samplesPerFrame);
+                zBuffer = GenerateStaticZBuffer(_samples_to_generate);
                 _zWriter.WriteMultiSample(false, zBuffer);
-                Thread.Sleep(100);
+            }
+        }
+
+        private void ScanSheetLoop(CancellationToken token)
+        {
+            double[,] sheetBuffer;
+            while (_isRunning && !token.IsCancellationRequested)
+            {
+                try { WaitForAOSpace(_aoTask_sheet.Stream, token); }
+                catch (OperationCanceledException) { break; }
+
+                sheetBuffer = GenerateSheetTriangleBuffer(_samples_to_generate);
+                _sheetWriter.WriteMultiSample(false, sheetBuffer);
+            }
+
+        }
+
+        private void ScanZLoop(CancellationToken token)
+        {
+            double[,] zBuffer;
+            while (_isRunning && !token.IsCancellationRequested)
+            {
+                // To prevent buffer over-runs, which can lead to discontinuities, we wait until space for a full set of samples
+                // is available in the bufffer, which we have configured to be twice the generated sample size.
+                // Note: Our Z and sheet tasks are not synchronized. Therefore, for experimental loops we need to separate the threads and wait
+                // on available samples independently to avoid jitter. However, for the idle loop we simply wait on the sheet and allow for jitter
+                // on z in cases where the task is lagging behind in generation
+                try { WaitForAOSpace(_aoTask_Z.Stream, token); }
+                catch (OperationCanceledException) { break; }
+
+                zBuffer = GenerateScanZBuffer(_samples_to_generate);
+                _zWriter.WriteMultiSample(false, zBuffer);
             }
         }
 
@@ -223,15 +307,38 @@ namespace MatjesImager.Hardware
 
         #region Methods
 
+        /// <summary>
+        /// Waits on buffer availability on a Daq stream to accomodate a full set of samples
+        /// </summary>
+        /// <param name="stream">The stream on which to wait</param>
+        /// <param name="token">Global cancellation token</param>
+        /// <exception cref="OperationCanceledException">Raises OperationCanceledException if cancellation was requested</exception>
+        private void WaitForAOSpace(DaqStream stream, CancellationToken token) 
+        {
+            while(stream.OutputBufferSpaceAvailable < _samplesPerFrame)
+            {
+                if (token.IsCancellationRequested)
+                    throw new OperationCanceledException();
+            }
+        }
+
         private void NITaskSetup(int frameRateHz)
         {
+            // On task generation we reset our global sample indices
+            _sheet_sample_index = 0;
+            _z_sample_index = 0;
             // TODO: When implementing actual z-scanning, we need to be cognizant of sample rates and buffer sizes to ensure that a) we do not need to regenerate buffers too quickly and b) that we do not exceed board buffer size
+            // Implement non-automatic regeneration on all tasks regardless of the scan loop. Then to avoid both buffer over- and under-runs, we make the write buffer twice as large as the generated sample size, wait for enough space
+            // to be available and then write another half-buffer to the board
 
             // Setup of analog tasks for mirror and piezo control
             _aoTask_sheet = new NationalInstruments.DAQmx.Task();
             _aoTask_sheet.AOChannels.CreateVoltageChannel(sheet1Channel, "MirrorX1", -5, 5, AOVoltageUnits.Volts);
             _aoTask_sheet.AOChannels.CreateVoltageChannel(sheet2Channel, "MirrorX2", -5, 5, AOVoltageUnits.Volts);
-            _aoTask_sheet.Timing.ConfigureSampleClock("", _sampleRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, _samplesPerFrame);
+            // Make task generate continuous samples, do not allow automatic regeneration and manually set the buffer size
+            _aoTask_sheet.Timing.ConfigureSampleClock("", _sampleRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples);
+            _aoTask_sheet.Stream.WriteRegenerationMode = WriteRegenerationMode.DoNotAllowRegeneration;
+            _aoTask_sheet.Stream.ConfigureOutputBuffer(_buffer_mult * _samples_to_generate);
             // TODO: Make determination whether there is a reason to synchronize these tasks to the frame and z-clock
 
             _sheetWriter = new AnalogMultiChannelWriter(_aoTask_sheet.Stream);
@@ -240,7 +347,9 @@ namespace MatjesImager.Hardware
             _aoTask_Z.AOChannels.CreateVoltageChannel(z1Channel, "MirrorY1", -5, 5, AOVoltageUnits.Volts);
             _aoTask_Z.AOChannels.CreateVoltageChannel(z2Channel, "MirrorY2", -5, 5, AOVoltageUnits.Volts);
             _aoTask_Z.AOChannels.CreateVoltageChannel(piezoChannel, "Piezo", 0, 10, AOVoltageUnits.Volts);
-            _aoTask_Z.Timing.ConfigureSampleClock("", _sampleRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples, _samplesPerFrame);
+            _aoTask_Z.Timing.ConfigureSampleClock("", _sampleRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples);
+            _aoTask_Z.Stream.WriteRegenerationMode = WriteRegenerationMode.DoNotAllowRegeneration;
+            _aoTask_Z.Stream.ConfigureOutputBuffer(_buffer_mult * _samples_to_generate);
             _aoTask_Z.Triggers.StartTrigger.ConfigureDigitalEdgeTrigger($"/{zAndCamBoard}/ctr{counterIndex}InternalOutput", DigitalEdgeStartTriggerEdge.Rising);
 
             _zWriter = new AnalogMultiChannelWriter(_aoTask_Z.Stream);
@@ -262,13 +371,14 @@ namespace MatjesImager.Hardware
             if (_isRunning)
                 throw new InvalidOperationException("Invoked StartIdleScan while ScanControl is running");
             _sampleRate = frameRateHz * _samplesPerFrame;
+            // For idle scan, to react appropriately fast to user input, we generate new samples every 50 ms
+            _samples_to_generate = (int)(_sampleRate / 20);
             _isRunning = true;
             _cancellationTokenSource?.Dispose();
             _cancellationTokenSource = new CancellationTokenSource();
             NITaskSetup(frameRateHz);
-            // NOTE: Since we regenerate samples, we do not have to care about the size of the write buffer that requires more consideration for scanning
-            double[,] sheetBuffer = GenerateSheetTriangleBuffer(_samplesPerFrame, _sweepsPerFrame);
-            double[,] z_fixed_buffer = GenerateStaticZBuffer(_samplesPerFrame);
+            double[,] sheetBuffer = GenerateSheetTriangleBuffer(_samples_to_generate * _buffer_mult);
+            double[,] z_fixed_buffer = GenerateStaticZBuffer(_samples_to_generate * _buffer_mult);
             _sheetWriter.WriteMultiSample(false, sheetBuffer);
             _zWriter.WriteMultiSample(false, z_fixed_buffer);
             // Start AO tasks - they will wait on the counter for triggering
@@ -285,9 +395,28 @@ namespace MatjesImager.Hardware
             if (_isRunning)
                 throw new InvalidOperationException("Invoked StartZScan while ScanControl is running");
             _sampleRate = frameRateHz * _samplesPerFrame;
+            // Ensure that our volume rate isn't larger than our camera frame-rate and that the frame rate is divisible by the volume rate
+            System.Diagnostics.Debug.Assert(frameRateHz >= volumeRate && frameRateHz % volumeRate == 0);
+            // Calculate the number of samples in each volume sweep
+            _z_period_samples = frameRateHz / volumeRate * _samplesPerFrame;
+            // For z-scan there is no direct user control. Generate 250 ms worth of samples ahead of time
+            _samples_to_generate = (int)(_sampleRate / 4);
             _isRunning = true;
             _cancellationTokenSource?.Dispose();
             _cancellationTokenSource = new CancellationTokenSource();
+            NITaskSetup(frameRateHz);
+            double[,] sheetBuffer = GenerateSheetTriangleBuffer(_samples_to_generate * _buffer_mult);
+            double[,] z_sweep_buffer = GenerateScanZBuffer(_samples_to_generate * _buffer_mult);
+            _sheetWriter.WriteMultiSample(false, sheetBuffer);
+            _zWriter.WriteMultiSample(false, z_sweep_buffer);
+            // Start AO tasks - they will wait on the counter for triggering
+            _aoTask_sheet.Start();
+            _aoTask_Z.Start();
+            // Start the ao task loops
+            System.Threading.Tasks.Task.Run(() => ScanSheetLoop(_cancellationTokenSource.Token));
+            System.Threading.Tasks.Task.Run(() => ScanZLoop(_cancellationTokenSource.Token));
+            // Pull trigger on everything by starting counter (NOTE: This includes the camera)
+            _counterTask.Start();
         }
         
         /// <summary>
@@ -345,22 +474,24 @@ namespace MatjesImager.Hardware
         /// <param name="vMin2">The lowest value for the second triangle wave</param>
         /// <param name="vMax2">The highest value for the second triangle wave</param>
         /// <returns>The analog out buffer</returns>
-        private double[,] GenerateSheetTriangleBuffer(int totalSamples, int cycles)
+        private double[,] GenerateSheetTriangleBuffer(int totalSamples)
         {
+            // TODO: To make this work for both idle and z-scan, the sheet voltages should be parameters as they need to be fixed for experimental z-scanning!
             double[,] buffer = new double[2, totalSamples];
-            int samplesPerCycle = totalSamples / cycles;
+            int samplesPerCycle = _samplesPerFrame / _sweepsPerFrame;
             double voltage;
 
             for (int i = 0; i < totalSamples; i++)
             {
-                int cycleSample = i % samplesPerCycle;
+                long cycleSample = _sheet_sample_index % samplesPerCycle;
                 double phase = (double)cycleSample / samplesPerCycle;
 
-                voltage = Sheet1LeftVolts + ScanWaveforms.SmoothTriangle(phase, 0.1) * (Sheet1RightVolts - Sheet1LeftVolts);
+                voltage = Sheet1LeftVolts + ScanWaveforms.SmoothTriangle(phase, sheetTurnAround) * (Sheet1RightVolts - Sheet1LeftVolts);
                 buffer[0, i] = voltage;
 
-                voltage = Sheet2LeftVolts + ScanWaveforms.SmoothTriangle(phase, 0.1) * (Sheet2RightVolts - Sheet2LeftVolts);
+                voltage = Sheet2LeftVolts + ScanWaveforms.SmoothTriangle(phase, sheetTurnAround) * (Sheet2RightVolts - Sheet2LeftVolts);
                 buffer[1, i] = voltage;
+                _sheet_sample_index++;
             }
             return buffer;
         }
@@ -378,7 +509,36 @@ namespace MatjesImager.Hardware
                 buffer[0, i] = Z1_Fixed;
                 buffer[1, i] = Z2_Fixed;
                 buffer[2, i] = _piezo_fixed_volts; // Not using property since we need it in volts
+                _z_sample_index++;  // Not used here
             }
+            return buffer;
+        }
+
+        private double[,] GenerateScanZBuffer(int totalSamples)
+        {
+            // TODO: The following are only test-values, needs to be provided by the user eventually
+            const double Piezo_start_um = 25;
+            const double Piezo_end_um = 300;
+
+            double[,] buffer = new double[3, totalSamples];
+            double voltage;
+            double piezo_um;
+
+            for (int i = 0; i < totalSamples; i++)
+            {
+                long cycleSample = _z_sample_index % _z_period_samples;
+                double phase = (double)cycleSample / _z_period_samples;
+
+                piezo_um = Piezo_start_um + ScanWaveforms.Sawtooth(phase, piezoSawtoothShape)*(Piezo_end_um - Piezo_start_um);
+                voltage = piezo_um / 450.0 * 10.0;
+                if (voltage > 10)
+                    voltage = 10;
+                buffer[2, i] = voltage;  // Piezo is the last channel
+                buffer[0, i] = _convertZPosition_sheet1.ConvertPiezoToZ(piezo_um);
+                buffer[1, i] = _convertZPosition_sheet2.ConvertPiezoToZ(piezo_um);
+                _z_sample_index++;
+            }
+
             return buffer;
         }
 
