@@ -171,8 +171,10 @@
                                     <Run Text="{Binding Z2Volts, StringFormat='Z2: {0:F3} V', Mode=OneWay}"/>
                                 </TextBlock>
                                 <TextBlock Foreground="White">
-                                    <Run Text="{Binding Residual1Microns, StringFormat='Residual: {0:F1} /', Mode=OneWay}"/>
-                                    <Run Text="{Binding Residual2Microns, StringFormat='{0:F1} um', Mode=OneWay}"/>
+                                    <Run Text="Residual (um):"/>
+                                    <Run Text="{Binding Residual1Microns, StringFormat=F1, Mode=OneWay}"/>
+                                    <Run Text="/"/>
+                                    <Run Text="{Binding Residual2Microns, StringFormat=F1, Mode=OneWay}"/>
                                 </TextBlock>
                                 <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                     <Button Content="Go to" Padding="4,0" Click="GoToPoint_Click" ToolTip="Move piezo and sheets to this point"/>
