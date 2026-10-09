@@ -37,7 +37,7 @@
         <Label Content="{Binding Camera.FrameRate, ConverterParameter=2, Converter={StaticResource RoundDoubleConverter}}" HorizontalAlignment="Left" Margin="39,424,0,0" VerticalAlignment="Top" FontSize="10" Background="#FFECAB1C" Width="52"/>
         <Utils:RangeSlider Grid.Column="1" HorizontalAlignment="Left" Margin="10,145,0,0" VerticalAlignment="Top" Height="165" IsVertical="True" Maximum="65535" LowerValue="{Binding Camera.ImageScaleMin}" UpperValue="{Binding Camera.ImageScaleMax}" ShowRangeText="True" RangeTextFormat="{}{0:0} - {1:0}" MinimumRange="10" DefaultUpperValue="65535" DefaultLowerValue="0" FineAdjustmentFactor="0.05"/>
         <Utils:RangeSlider HorizontalAlignment="Left" Margin="17,48,0,0" VerticalAlignment="Top" Width="169" DefaultLowerValue="0" DefaultUpperValue="0" Maximum="3" Minimum="-3" ShowRangeText="True" LowerValue="{Binding Scanhead.Sheet1LeftVolts}" UpperValue="{Binding Scanhead.Sheet1RightVolts}"/>
-        <Utils:RangeSlider HorizontalAlignment="Left" Margin="17,113,0,0" VerticalAlignment="Top" Width="169" DefaultLowerValue="0" DefaultUpperValue="0" Maximum="1" Minimum="-1" ShowRangeText="True" LowerValue="{Binding Sheet2LeftVolts}" UpperValue="{Binding Scanhead.Sheet2RightVolts}" FineAdjustmentFactor="0.05"/>
+        <Utils:RangeSlider HorizontalAlignment="Left" Margin="17,113,0,0" VerticalAlignment="Top" Width="169" DefaultLowerValue="0" DefaultUpperValue="0" Maximum="1" Minimum="-1" ShowRangeText="True" LowerValue="{Binding ScanHead.Sheet2LeftVolts}" UpperValue="{Binding Scanhead.Sheet2RightVolts}" FineAdjustmentFactor="0.05"/>
         <Button Content="Start Scan" HorizontalAlignment="Left" Margin="73,372,0,0" VerticalAlignment="Top" Click="Button_Click"/>
 
 
