@@ -1,4 +1,5 @@
-﻿using MatjesUtils;
+﻿using MatjesImager.Properties;
+using MatjesUtils;
 using NationalInstruments.DAQmx;
 using System;
 using System.Collections.Generic;
@@ -86,7 +87,7 @@ namespace MatjesImager.Hardware
         /// <summary>
         /// The number of sweeps on the sheet generating mirrors to perform per camera frame
         /// </summary>
-        private const int _sweepsPerFrame = 4;
+        private int _sweepsPerFrame;
 
         /// <summary>
         /// Sample writer object for sheet task
@@ -134,34 +135,28 @@ namespace MatjesImager.Hardware
         /// </summary>
         private IConvertZPosition _convertZPosition_sheet2;
 
-        // Analog control channel definitions before these move into properties
-        private const string sheetBoard = "Dev1";
-        private const string zAndCamBoard = "Dev2";
-        private const string counterIndex = "0";
-        private const string counterChannel = $"{zAndCamBoard}/ctr{counterIndex}";
-        private const string counterOutput_terminal = $"/{zAndCamBoard}/PFI0";
-        private const string sheet1Channel = $"{sheetBoard}/ao0";
-        private const string sheet2Channel = $"{sheetBoard}/ao2";
+        // Waveform parameters are loaded from application settings when a scan starts (see LoadWaveformSettings)
+        // so that they cannot change while tasks are running
 
-        private const string z1Channel = $"{zAndCamBoard}/ao1";
+        /// <summary>
+        /// Smoothing window of the sheet triangle turn-arounds as a fraction of the sweep period
+        /// </summary>
+        private double _sheetTurnAround;
 
-        private const string z2Channel = $"{zAndCamBoard}/ao2";
-
-        private const string piezoChannel = $"{zAndCamBoard}/ao0";
-
-        private const double sheetTurnAround = 0.1;
-
-        private const double piezoSawtoothShape = 0.9;
+        /// <summary>
+        /// Fraction of each piezo sawtooth period spent on the rising flank
+        /// </summary>
+        private double _piezoSawtoothShape;
 
         /// <summary>
         /// The number of ao samples to generate for each camera frame
         /// </summary>
-        private const int _samplesPerFrame = 1000;
+        private int _samplesPerFrame;
 
         /// <summary>
         /// The buffer size on our AO tasks will be generated_samples x _buffer_mult in size
         /// </summary>
-        private const int _buffer_mult = 2;
+        private int _buffer_mult;
 
 
         #endregion
@@ -242,9 +237,27 @@ namespace MatjesImager.Hardware
         /// </summary>
         public double Piezo_Fixed_Microns
         {
-            get { return _piezo_fixed_volts / 10.0 * 450.0; }
-            set { _piezo_fixed_volts = value / 450.0 * 10.0; RaisePropertyChanged(nameof(Piezo_Fixed_Microns)); }
+            get { return _piezo_fixed_volts / Settings.Default.PiezoMaxVolts * Settings.Default.PiezoRangeMicrons; }
+            set { _piezo_fixed_volts = value / Settings.Default.PiezoRangeMicrons * Settings.Default.PiezoMaxVolts; RaisePropertyChanged(nameof(Piezo_Fixed_Microns)); }
         }
+
+        /// <summary>
+        /// The full travel of the piezo (in microns)
+        /// </summary>
+        public double PiezoRangeMicrons
+        {
+            get { return Settings.Default.PiezoRangeMicrons; }
+        }
+
+        // Physical channel names assembled from the board and channel names in the application settings
+        private static string Sheet1Channel => $"{Settings.Default.SheetBoard}/{Settings.Default.Sheet1Channel}";
+        private static string Sheet2Channel => $"{Settings.Default.SheetBoard}/{Settings.Default.Sheet2Channel}";
+        private static string Z1Channel => $"{Settings.Default.ZAndCamBoard}/{Settings.Default.Z1Channel}";
+        private static string Z2Channel => $"{Settings.Default.ZAndCamBoard}/{Settings.Default.Z2Channel}";
+        private static string PiezoChannel => $"{Settings.Default.ZAndCamBoard}/{Settings.Default.PiezoChannel}";
+        private static string CounterChannel => $"{Settings.Default.ZAndCamBoard}/{Settings.Default.CameraTriggerCounter}";
+        private static string CounterOutputTerminal => $"/{Settings.Default.ZAndCamBoard}/{Settings.Default.CameraTriggerTerminal}";
+        private static string CounterInternalOutput => $"/{Settings.Default.ZAndCamBoard}/{Settings.Default.CameraTriggerCounter}InternalOutput";
 
         #endregion
 
@@ -322,6 +335,18 @@ namespace MatjesImager.Hardware
             }
         }
 
+        /// <summary>
+        /// Loads waveform and buffer parameters from the application settings
+        /// </summary>
+        private void LoadWaveformSettings()
+        {
+            _samplesPerFrame = Settings.Default.SamplesPerFrame;
+            _sweepsPerFrame = Settings.Default.SweepsPerFrame;
+            _buffer_mult = Settings.Default.AOBufferMultiplier;
+            _sheetTurnAround = Settings.Default.SheetTurnAround;
+            _piezoSawtoothShape = Settings.Default.PiezoSawtoothShape;
+        }
+
         private void NITaskSetup(int frameRateHz)
         {
             // On task generation we reset our global sample indices
@@ -333,8 +358,8 @@ namespace MatjesImager.Hardware
 
             // Setup of analog tasks for mirror and piezo control
             _aoTask_sheet = new NationalInstruments.DAQmx.Task();
-            _aoTask_sheet.AOChannels.CreateVoltageChannel(sheet1Channel, "MirrorX1", -5, 5, AOVoltageUnits.Volts);
-            _aoTask_sheet.AOChannels.CreateVoltageChannel(sheet2Channel, "MirrorX2", -5, 5, AOVoltageUnits.Volts);
+            _aoTask_sheet.AOChannels.CreateVoltageChannel(Sheet1Channel, "MirrorX1", Settings.Default.MirrorMinVolts, Settings.Default.MirrorMaxVolts, AOVoltageUnits.Volts);
+            _aoTask_sheet.AOChannels.CreateVoltageChannel(Sheet2Channel, "MirrorX2", Settings.Default.MirrorMinVolts, Settings.Default.MirrorMaxVolts, AOVoltageUnits.Volts);
             // Make task generate continuous samples, do not allow automatic regeneration and manually set the buffer size
             _aoTask_sheet.Timing.ConfigureSampleClock("", _sampleRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples);
             _aoTask_sheet.Stream.WriteRegenerationMode = WriteRegenerationMode.DoNotAllowRegeneration;
@@ -344,20 +369,20 @@ namespace MatjesImager.Hardware
             _sheetWriter = new AnalogMultiChannelWriter(_aoTask_sheet.Stream);
 
             _aoTask_Z = new NationalInstruments.DAQmx.Task();
-            _aoTask_Z.AOChannels.CreateVoltageChannel(z1Channel, "MirrorY1", -5, 5, AOVoltageUnits.Volts);
-            _aoTask_Z.AOChannels.CreateVoltageChannel(z2Channel, "MirrorY2", -5, 5, AOVoltageUnits.Volts);
-            _aoTask_Z.AOChannels.CreateVoltageChannel(piezoChannel, "Piezo", 0, 10, AOVoltageUnits.Volts);
+            _aoTask_Z.AOChannels.CreateVoltageChannel(Z1Channel, "MirrorY1", Settings.Default.MirrorMinVolts, Settings.Default.MirrorMaxVolts, AOVoltageUnits.Volts);
+            _aoTask_Z.AOChannels.CreateVoltageChannel(Z2Channel, "MirrorY2", Settings.Default.MirrorMinVolts, Settings.Default.MirrorMaxVolts, AOVoltageUnits.Volts);
+            _aoTask_Z.AOChannels.CreateVoltageChannel(PiezoChannel, "Piezo", 0, Settings.Default.PiezoMaxVolts, AOVoltageUnits.Volts);
             _aoTask_Z.Timing.ConfigureSampleClock("", _sampleRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples);
             _aoTask_Z.Stream.WriteRegenerationMode = WriteRegenerationMode.DoNotAllowRegeneration;
             _aoTask_Z.Stream.ConfigureOutputBuffer(_buffer_mult * _samples_to_generate);
-            _aoTask_Z.Triggers.StartTrigger.ConfigureDigitalEdgeTrigger($"/{zAndCamBoard}/ctr{counterIndex}InternalOutput", DigitalEdgeStartTriggerEdge.Rising);
+            _aoTask_Z.Triggers.StartTrigger.ConfigureDigitalEdgeTrigger(CounterInternalOutput, DigitalEdgeStartTriggerEdge.Rising);
 
             _zWriter = new AnalogMultiChannelWriter(_aoTask_Z.Stream);
 
             // Setup Counter Output Task for Camera Trigger
             _counterTask = new NationalInstruments.DAQmx.Task();
-            _counterTask.COChannels.CreatePulseChannelFrequency(counterChannel, "CameraTrigger", COPulseFrequencyUnits.Hertz, COPulseIdleState.Low, 0.0, frameRateHz, 0.5);
-            _counterTask.ExportSignals.ExportHardwareSignal(ExportSignal.CounterOutputEvent, counterOutput_terminal);
+            _counterTask.COChannels.CreatePulseChannelFrequency(CounterChannel, "CameraTrigger", COPulseFrequencyUnits.Hertz, COPulseIdleState.Low, 0.0, frameRateHz, 0.5);
+            _counterTask.ExportSignals.ExportHardwareSignal(ExportSignal.CounterOutputEvent, CounterOutputTerminal);
             _counterTask.Timing.ConfigureImplicit(SampleQuantityMode.ContinuousSamples);
         }
 
@@ -370,6 +395,7 @@ namespace MatjesImager.Hardware
         {
             if (_isRunning)
                 throw new InvalidOperationException("Invoked StartIdleScan while ScanControl is running");
+            LoadWaveformSettings();
             _sampleRate = frameRateHz * _samplesPerFrame;
             // For idle scan, to react appropriately fast to user input, we generate new samples every 50 ms
             _samples_to_generate = (int)(_sampleRate / 20);
@@ -394,6 +420,7 @@ namespace MatjesImager.Hardware
         {
             if (_isRunning)
                 throw new InvalidOperationException("Invoked StartZScan while ScanControl is running");
+            LoadWaveformSettings();
             _sampleRate = frameRateHz * _samplesPerFrame;
             // Ensure that our volume rate isn't larger than our camera frame-rate and that the frame rate is divisible by the volume rate
             System.Diagnostics.Debug.Assert(frameRateHz >= volumeRate && frameRateHz % volumeRate == 0);
@@ -427,16 +454,16 @@ namespace MatjesImager.Hardware
             if (_isRunning)
                 throw new InvalidOperationException("Attempted SetAllZero while ScanControl is running");
             var aoTask_sheet = new NationalInstruments.DAQmx.Task();
-            aoTask_sheet.AOChannels.CreateVoltageChannel(sheet1Channel, "MirrorX1", -5, 5, AOVoltageUnits.Volts);
-            aoTask_sheet.AOChannels.CreateVoltageChannel(sheet2Channel, "MirrorX2", -5, 5, AOVoltageUnits.Volts);
+            aoTask_sheet.AOChannels.CreateVoltageChannel(Sheet1Channel, "MirrorX1", Settings.Default.MirrorMinVolts, Settings.Default.MirrorMaxVolts, AOVoltageUnits.Volts);
+            aoTask_sheet.AOChannels.CreateVoltageChannel(Sheet2Channel, "MirrorX2", Settings.Default.MirrorMinVolts, Settings.Default.MirrorMaxVolts, AOVoltageUnits.Volts);
 
             var sheetWriter = new AnalogMultiChannelWriter(aoTask_sheet.Stream);
             sheetWriter.WriteSingleSample(true, [0, 0]);
 
             var aoTask_Z = new NationalInstruments.DAQmx.Task();
-            aoTask_Z.AOChannels.CreateVoltageChannel(z1Channel, "MirrorY1", -5, 5, AOVoltageUnits.Volts);
-            aoTask_Z.AOChannels.CreateVoltageChannel(z2Channel, "MirrorY2", -5, 5, AOVoltageUnits.Volts);
-            aoTask_Z.AOChannels.CreateVoltageChannel(piezoChannel, "Piezo", 0, 10, AOVoltageUnits.Volts);
+            aoTask_Z.AOChannels.CreateVoltageChannel(Z1Channel, "MirrorY1", Settings.Default.MirrorMinVolts, Settings.Default.MirrorMaxVolts, AOVoltageUnits.Volts);
+            aoTask_Z.AOChannels.CreateVoltageChannel(Z2Channel, "MirrorY2", Settings.Default.MirrorMinVolts, Settings.Default.MirrorMaxVolts, AOVoltageUnits.Volts);
+            aoTask_Z.AOChannels.CreateVoltageChannel(PiezoChannel, "Piezo", 0, Settings.Default.PiezoMaxVolts, AOVoltageUnits.Volts);
 
             var zWriter = new AnalogMultiChannelWriter(aoTask_Z.Stream);
             zWriter.WriteSingleSample(true, [0, 0, 0]);
@@ -486,10 +513,10 @@ namespace MatjesImager.Hardware
                 long cycleSample = _sheet_sample_index % samplesPerCycle;
                 double phase = (double)cycleSample / samplesPerCycle;
 
-                voltage = Sheet1LeftVolts + ScanWaveforms.SmoothTriangle(phase, sheetTurnAround) * (Sheet1RightVolts - Sheet1LeftVolts);
+                voltage = Sheet1LeftVolts + ScanWaveforms.SmoothTriangle(phase, _sheetTurnAround) * (Sheet1RightVolts - Sheet1LeftVolts);
                 buffer[0, i] = voltage;
 
-                voltage = Sheet2LeftVolts + ScanWaveforms.SmoothTriangle(phase, sheetTurnAround) * (Sheet2RightVolts - Sheet2LeftVolts);
+                voltage = Sheet2LeftVolts + ScanWaveforms.SmoothTriangle(phase, _sheetTurnAround) * (Sheet2RightVolts - Sheet2LeftVolts);
                 buffer[1, i] = voltage;
                 _sheet_sample_index++;
             }
@@ -520,6 +547,9 @@ namespace MatjesImager.Hardware
             const double Piezo_start_um = 25;
             const double Piezo_end_um = 300;
 
+            double piezoMaxVolts = Settings.Default.PiezoMaxVolts;
+            double piezoRangeMicrons = Settings.Default.PiezoRangeMicrons;
+
             double[,] buffer = new double[3, totalSamples];
             double voltage;
             double piezo_um;
@@ -529,10 +559,10 @@ namespace MatjesImager.Hardware
                 long cycleSample = _z_sample_index % _z_period_samples;
                 double phase = (double)cycleSample / _z_period_samples;
 
-                piezo_um = Piezo_start_um + ScanWaveforms.Sawtooth(phase, piezoSawtoothShape)*(Piezo_end_um - Piezo_start_um);
-                voltage = piezo_um / 450.0 * 10.0;
-                if (voltage > 10)
-                    voltage = 10;
+                piezo_um = Piezo_start_um + ScanWaveforms.Sawtooth(phase, _piezoSawtoothShape)*(Piezo_end_um - Piezo_start_um);
+                voltage = piezo_um / piezoRangeMicrons * piezoMaxVolts;
+                if (voltage > piezoMaxVolts)
+                    voltage = piezoMaxVolts;
                 buffer[2, i] = voltage;  // Piezo is the last channel
                 buffer[0, i] = _convertZPosition_sheet1.ConvertPiezoToZ(piezo_um);
                 buffer[1, i] = _convertZPosition_sheet2.ConvertPiezoToZ(piezo_um);
