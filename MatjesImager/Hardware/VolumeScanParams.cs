@@ -45,14 +45,14 @@ namespace MatjesImager.Hardware
         /// <summary>
         /// The converter to convert between piezo and z volts for sheet 1
         /// </summary>
-        public LinearZConverter ZConverterSheet1 { get; private set; }
+        public IConvertZPosition ZConverterSheet1 { get; private set; }
 
         /// <summary>
         /// The converter to convert between piezo and z volts for sheet 2
         /// </summary>
-        public LinearZConverter ZConverterSheet2 { get; private set; }
+        public IConvertZPosition ZConverterSheet2 { get; private set; }
 
-        public VolumeScanParams(int cameraFrameRate, int framesPerVolume, double startMicrons, double depthMicrons, VolumeScanType paradigm, LinearZConverter zConverterSheet1, LinearZConverter zConverterSheet2)
+        public VolumeScanParams(int cameraFrameRate, int framesPerVolume, double startMicrons, double depthMicrons, VolumeScanType paradigm, IConvertZPosition zConverterSheet1, IConvertZPosition zConverterSheet2)
         {
             if (cameraFrameRate < 1)
                 throw new ArgumentOutOfRangeException(nameof(cameraFrameRate), "Camera frame rate has to be larger than 0.");
