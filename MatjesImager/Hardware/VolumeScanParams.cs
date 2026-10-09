@@ -9,12 +9,12 @@ namespace MatjesImager.Hardware
     /// <summary>
     /// Describes the type of experiment to run during the volume scan
     /// </summary>
-    internal enum VolumeScanType { ScanOnly=0 }
+    public enum VolumeScanType { ScanOnly=0 }
 
     /// <summary>
     /// Describes paramters for a volume scan
     /// </summary>
-    internal struct VolumeScanParams
+    public struct VolumeScanParams
     {
         /// <summary>
         /// The camera frame rate during the scan
@@ -80,7 +80,7 @@ namespace MatjesImager.Hardware
     /// <summary>
     /// Determines the width of both scan sheets which is fixed during volume scans
     /// </summary>
-    internal struct SheetParams
+    public struct SheetParams
     {
         /// <summary>
         /// The left side of sheet 1
