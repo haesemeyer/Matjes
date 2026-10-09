@@ -15,11 +15,11 @@ namespace MatjesImager.ViewModels
 {
     public unsafe class TestViewModel : ViewModelBase
     {
-        private Microscope? lightSheet => (App.Current as App).LightSheet;
+        private Microscope lightSheet => App.LightSheet;
 
         public EZImageSource? CamDisplay
         {
-            get { return lightSheet?.Camera?.Display; }
+            get { return lightSheet.Camera?.Display; }
         }
 
         private double _image_scale_min = 0.0;
@@ -38,26 +38,29 @@ namespace MatjesImager.ViewModels
             set { _image_scale_max = value; RaisePropertyChanged(nameof(ImageScaleMax));}
         }
 
-        public ScanControl? Scanhead => lightSheet?.ScanHead;
+        public ScanControl Scanhead => lightSheet.ScanHead;
 
-        public CameraStream? Camera => lightSheet?.Camera;
+        public CameraStream? Camera => lightSheet.Camera;
 
         public TestViewModel() {
             if (IsInDesignMode)
                 return;
-            lightSheet?.StartIdleScan(100);
+            lightSheet.StartIdleScan(100);
         }
 
         public void StartZScan()
         {
-            lightSheet?.Stop();
+            lightSheet.Stop();
             var scanParams = new VolumeScanParams(100, 100, 5, 400, VolumeScanType.ScanOnly, new LinearZConverter(-4.0 / 450, 2, 5, -5), new LinearZConverter(-4.0 / 450, 2, 5, -5));
-            lightSheet?.StartVolumeScan(scanParams);
+            lightSheet.StartVolumeScan(scanParams);
         }
 
         override protected void Dispose(bool disposing)
         {
-            lightSheet?.Stop();
+            // Only stop from an explicit Dispose: from the finalizer the application may already have released the microscope
+            if (!IsDisposed && disposing && !IsInDesignMode)
+                lightSheet.Stop();
+            base.Dispose(disposing);
         }
     }
     }

@@ -55,7 +55,7 @@ namespace MatjesImager.ViewModels
 
         #region Members
 
-        private Microscope lightSheet => (App.Current as App).LightSheet;
+        private Microscope lightSheet => App.LightSheet;
 
         private LinearFitResult? _fit1;
 
@@ -402,8 +402,8 @@ namespace MatjesImager.ViewModels
             {
                 if (!IsInDesignMode)
                 {
-                    Scanhead?.PropertyChanged -= Scanhead_PropertyChanged;
-                    lightSheet?.Stop();
+                    Scanhead.PropertyChanged -= Scanhead_PropertyChanged;
+                    lightSheet.Stop();
                 }
                 foreach (var p in CalibrationPoints)
                     p.Dispose();
