@@ -30,7 +30,7 @@
         <Label Content="{Binding Scanhead.Z2_Fixed, ConverterParameter=2, Converter={StaticResource RoundDoubleConverter}}" HorizontalAlignment="Left" Margin="203,343,0,0" VerticalAlignment="Top" RenderTransformOrigin="-0.832,0.452"/>
         <Label Content="Z1" HorizontalAlignment="Left" Margin="158,215,0,0" VerticalAlignment="Top"/>
         <Label Content="Z2&#xD;&#xA;" HorizontalAlignment="Left" Margin="212,215,0,0" VerticalAlignment="Top"/>
-        <Slider x:Name="Piezo_Pos" HorizontalAlignment="Left" Margin="17,241,0,0" VerticalAlignment="Top" Width="33" Orientation="Vertical" Height="104" TickFrequency="50" TickPlacement="BottomRight" LargeChange="10" IsDirectionReversed="True" Value="{Binding Scanhead.Piezo_Fixed_Microns}" Maximum="450" SmallChange="1"/>
+        <Slider x:Name="Piezo_Pos" HorizontalAlignment="Left" Margin="17,241,0,0" VerticalAlignment="Top" Width="33" Orientation="Vertical" Height="104" TickFrequency="50" TickPlacement="BottomRight" LargeChange="10" IsDirectionReversed="True" Value="{Binding Scanhead.Piezo_Fixed_Microns}" Maximum="{Binding Scanhead.PiezoRangeMicrons}" SmallChange="1"/>
         <Label Content="Piezo" HorizontalAlignment="Left" Margin="8,0,0,0" VerticalAlignment="Center"/>
         <Label HorizontalAlignment="Left" Margin="17,343,0,0" VerticalAlignment="Top" RenderTransformOrigin="3.658,1.116" Content="{Binding Scanhead.Piezo_Fixed_Microns, ConverterParameter=0, Converter={StaticResource RoundDoubleConverter}}"/>
         <Label Content="{Binding FrameIndex}" HorizontalAlignment="Left" Margin="187,424,0,0" VerticalAlignment="Top" Width="74" FontSize="10"/>

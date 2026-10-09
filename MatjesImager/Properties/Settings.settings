@@ -1,0 +1,63 @@
+<?xml version='1.0' encoding='utf-8'?>
+<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="MatjesImager.Properties" GeneratedClassName="Settings">
+  <Profiles />
+  <Settings>
+    <Setting Name="SheetBoard" Description="NI-DAQmx device name of the board generating the sheet (X-mirror) waveforms" Type="System.String" Scope="User">
+      <Value Profile="(Default)">Dev1</Value>
+    </Setting>
+    <Setting Name="ZAndCamBoard" Description="NI-DAQmx device name of the board generating the z (Y-mirror and piezo) waveforms and the camera trigger" Type="System.String" Scope="User">
+      <Value Profile="(Default)">Dev2</Value>
+    </Setting>
+    <Setting Name="Sheet1Channel" Description="Analog output on the sheet board driving the X-mirror of scan-head 1" Type="System.String" Scope="User">
+      <Value Profile="(Default)">ao0</Value>
+    </Setting>
+    <Setting Name="Sheet2Channel" Description="Analog output on the sheet board driving the X-mirror of scan-head 2" Type="System.String" Scope="User">
+      <Value Profile="(Default)">ao2</Value>
+    </Setting>
+    <Setting Name="Z1Channel" Description="Analog output on the z/camera board driving the Y-mirror (z) of scan-head 1" Type="System.String" Scope="User">
+      <Value Profile="(Default)">ao1</Value>
+    </Setting>
+    <Setting Name="Z2Channel" Description="Analog output on the z/camera board driving the Y-mirror (z) of scan-head 2" Type="System.String" Scope="User">
+      <Value Profile="(Default)">ao2</Value>
+    </Setting>
+    <Setting Name="PiezoChannel" Description="Analog output on the z/camera board driving the objective piezo" Type="System.String" Scope="User">
+      <Value Profile="(Default)">ao0</Value>
+    </Setting>
+    <Setting Name="CameraTriggerCounter" Description="Counter on the z/camera board generating the camera frame trigger" Type="System.String" Scope="User">
+      <Value Profile="(Default)">ctr0</Value>
+    </Setting>
+    <Setting Name="CameraTriggerTerminal" Description="Terminal on the z/camera board to which the camera trigger is exported" Type="System.String" Scope="User">
+      <Value Profile="(Default)">PFI0</Value>
+    </Setting>
+    <Setting Name="MirrorMinVolts" Description="Lower limit of the analog output range of all mirror channels" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">-5</Value>
+    </Setting>
+    <Setting Name="MirrorMaxVolts" Description="Upper limit of the analog output range of all mirror channels" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">5</Value>
+    </Setting>
+    <Setting Name="PiezoMaxVolts" Description="Control voltage corresponding to the full piezo travel (output range is 0 to this value)" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">10</Value>
+    </Setting>
+    <Setting Name="PiezoRangeMicrons" Description="Full travel of the objective piezo in microns" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">450</Value>
+    </Setting>
+    <Setting Name="PiezoSerialNumber" Description="Serial number of the Thorlabs PPC001 piezo controller" Type="System.String" Scope="User">
+      <Value Profile="(Default)">44506384</Value>
+    </Setting>
+    <Setting Name="SamplesPerFrame" Description="Number of analog output samples generated per camera frame" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">1000</Value>
+    </Setting>
+    <Setting Name="SweepsPerFrame" Description="Number of sheet sweeps (full triangle cycles) per camera frame" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">4</Value>
+    </Setting>
+    <Setting Name="AOBufferMultiplier" Description="AO task buffer size as a multiple of the samples generated per write" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">2</Value>
+    </Setting>
+    <Setting Name="SheetTurnAround" Description="Smoothing window of the sheet triangle turn-arounds as a fraction of the sweep period" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">0.1</Value>
+    </Setting>
+    <Setting Name="PiezoSawtoothShape" Description="Fraction of each piezo sawtooth period spent on the rising (imaging) flank" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">0.9</Value>
+    </Setting>
+  </Settings>
+</SettingsFile>
