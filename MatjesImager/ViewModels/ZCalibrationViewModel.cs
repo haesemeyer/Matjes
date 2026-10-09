@@ -55,9 +55,7 @@ namespace MatjesImager.ViewModels
 
         #region Members
 
-        private ScanControl _scanhead;
-
-        private CameraStream? _camera;
+        private Microscope lightSheet => (App.Current as App).LightSheet;
 
         private LinearFitResult? _fit1;
 
@@ -91,18 +89,11 @@ namespace MatjesImager.ViewModels
             CalibrationPoints = new ObservableCollection<CalibrationPoint>();
             for (int i = 0; i < NumCalibrationPoints; i++)
                 CalibrationPoints.Add(new CalibrationPoint(i + 1));
-            // The converters are irrelevant during calibration since only the idle scan with fixed positions is used
-            _scanhead = new ScanControl();
-            _scanhead.PropertyChanged += Scanhead_PropertyChanged;
             StatusMessage = "Move the piezo into the sample, focus both sheets and add a calibration point.";
             if (IsInDesignMode)
                 return;
-            _scanhead.SetAllAOZero();
-            PiezoConfig.ConfigurePPC001(Properties.Settings.Default.PiezoSerialNumber);// Set Closed loop, external BNC control and corrected position report on Piezo
-            _camera = new CameraStream();
-            // Camera has to be armed before the scanhead starts the trigger counter
-            _camera.Start();
-            _scanhead.StartIdleScan(100);
+            Scanhead.PropertyChanged += Scanhead_PropertyChanged;
+            lightSheet.StartIdleScan(100);
         }
 
         #region Properties
@@ -110,12 +101,12 @@ namespace MatjesImager.ViewModels
         /// <summary>
         /// Control of mirrors and piezo. During calibration the idle scan is used, i.e. fixed piezo and sheet z-positions
         /// </summary>
-        public ScanControl Scanhead => _scanhead;
+        public ScanControl Scanhead => lightSheet.ScanHead;
 
         /// <summary>
         /// The live camera stream
         /// </summary>
-        public CameraStream? Camera => _camera;
+        public CameraStream? Camera => lightSheet.Camera;
 
         /// <summary>
         /// The calibration slots
@@ -338,7 +329,7 @@ namespace MatjesImager.ViewModels
         /// </summary>
         private EZImageSource? TakeSnapshot()
         {
-            using var frame = _camera?.CopyLatestFrame();
+            using var frame = Camera?.CopyLatestFrame();
             if (frame == null)
                 return null;
             var snapshot = new EZImageSource_LH();
@@ -409,14 +400,11 @@ namespace MatjesImager.ViewModels
         {
             if (!IsDisposed && disposing)
             {
-                _scanhead.PropertyChanged -= Scanhead_PropertyChanged;
                 if (!IsInDesignMode)
                 {
-                    _scanhead.Stop();
-                    _camera?.Dispose();
-                    _scanhead.SetAllAOZero();
+                    Scanhead?.PropertyChanged -= Scanhead_PropertyChanged;
+                    lightSheet?.Stop();
                 }
-                _scanhead.Dispose();
                 foreach (var p in CalibrationPoints)
                     p.Dispose();
             }
