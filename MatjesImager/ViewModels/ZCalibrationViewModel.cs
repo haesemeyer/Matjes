@@ -92,7 +92,7 @@ namespace MatjesImager.ViewModels
             for (int i = 0; i < NumCalibrationPoints; i++)
                 CalibrationPoints.Add(new CalibrationPoint(i + 1));
             // The converters are irrelevant during calibration since only the idle scan with fixed positions is used
-            _scanhead = new ScanControl(new LinearZConverter(-4.0 / 450, 2, Z_V_Max, Z_V_Min), new LinearZConverter(-4.0 / 450, 2, Z_V_Max, Z_V_Min));
+            _scanhead = new ScanControl();
             _scanhead.PropertyChanged += Scanhead_PropertyChanged;
             StatusMessage = "Move the piezo into the sample, focus both sheets and add a calibration point.";
             if (IsInDesignMode)

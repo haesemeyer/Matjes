@@ -125,16 +125,6 @@ namespace MatjesImager.Hardware
         /// </summary>
         private int _z_period_samples;
 
-        /// <summary>
-        /// Our converter that translates Piezo z-positions to mirror z-voltages for sheet 1
-        /// </summary>
-        private IConvertZPosition _convertZPosition_sheet1;
-
-        /// <summary>
-        /// Our converter that translates Piezo z-positions to mirror z-voltages for sheet 2
-        /// </summary>
-        private IConvertZPosition _convertZPosition_sheet2;
-
         // Waveform parameters are loaded from application settings when a scan starts (see LoadWaveformSettings)
         // so that they cannot change while tasks are running
 
@@ -161,10 +151,8 @@ namespace MatjesImager.Hardware
 
         #endregion
 
-        public ScanControl(IConvertZPosition z_converter_sheet1, IConvertZPosition z_converter_sheet2)
+        public ScanControl()
         {
-            ArgumentNullException.ThrowIfNull(z_converter_sheet1, nameof(z_converter_sheet1));
-            ArgumentNullException.ThrowIfNull(z_converter_sheet2, nameof(z_converter_sheet2));
             Sheet1LeftVolts = -1;
             Sheet2LeftVolts = -0.5;
             Sheet1RightVolts = 1;
@@ -172,8 +160,6 @@ namespace MatjesImager.Hardware
             Z1_Fixed = 0;
             Z2_Fixed = 0;
             Piezo_Fixed_Microns = 0;
-            _convertZPosition_sheet1 = z_converter_sheet1;
-            _convertZPosition_sheet2 = z_converter_sheet2;
         }
 
         #region Properties
@@ -277,14 +263,14 @@ namespace MatjesImager.Hardware
                 try { WaitForAOSpace(_aoTask_sheet.Stream, token); }
                 catch (OperationCanceledException) { break;  }
                     
-                sheetBuffer = GenerateSheetTriangleBuffer(_samples_to_generate);
+                sheetBuffer = GenerateSheetTriangleBuffer(_samples_to_generate, Sheet1LeftVolts, Sheet1RightVolts, Sheet2LeftVolts, Sheet2RightVolts);
                 _sheetWriter.WriteMultiSample(false, sheetBuffer);
                 zBuffer = GenerateStaticZBuffer(_samples_to_generate);
                 _zWriter.WriteMultiSample(false, zBuffer);
             }
         }
 
-        private void ScanSheetLoop(CancellationToken token)
+        private void ScanSheetLoop(CancellationToken token, SheetParams sheetParams)
         {
             double[,] sheetBuffer;
             while (_isRunning && !token.IsCancellationRequested)
@@ -292,13 +278,13 @@ namespace MatjesImager.Hardware
                 try { WaitForAOSpace(_aoTask_sheet.Stream, token); }
                 catch (OperationCanceledException) { break; }
 
-                sheetBuffer = GenerateSheetTriangleBuffer(_samples_to_generate);
+                sheetBuffer = GenerateSheetTriangleBuffer(_samples_to_generate, sheetParams.Sheet1LeftVolts, sheetParams.Sheet1RightVolts, sheetParams.Sheet2LeftVolts, sheetParams.Sheet2RightVolts);
                 _sheetWriter.WriteMultiSample(false, sheetBuffer);
             }
 
         }
 
-        private void ScanZLoop(CancellationToken token)
+        private void ScanZLoop(CancellationToken token, VolumeScanParams scanParams)
         {
             double[,] zBuffer;
             while (_isRunning && !token.IsCancellationRequested)
@@ -311,7 +297,7 @@ namespace MatjesImager.Hardware
                 try { WaitForAOSpace(_aoTask_Z.Stream, token); }
                 catch (OperationCanceledException) { break; }
 
-                zBuffer = GenerateScanZBuffer(_samples_to_generate);
+                zBuffer = GenerateScanZBuffer(_samples_to_generate, scanParams);
                 _zWriter.WriteMultiSample(false, zBuffer);
             }
         }
@@ -403,7 +389,7 @@ namespace MatjesImager.Hardware
             _cancellationTokenSource?.Dispose();
             _cancellationTokenSource = new CancellationTokenSource();
             NITaskSetup(frameRateHz);
-            double[,] sheetBuffer = GenerateSheetTriangleBuffer(_samples_to_generate * _buffer_mult);
+            double[,] sheetBuffer = GenerateSheetTriangleBuffer(_samples_to_generate * _buffer_mult, Sheet1LeftVolts, Sheet1RightVolts, Sheet2LeftVolts, Sheet2RightVolts);
             double[,] z_fixed_buffer = GenerateStaticZBuffer(_samples_to_generate * _buffer_mult);
             _sheetWriter.WriteMultiSample(false, sheetBuffer);
             _zWriter.WriteMultiSample(false, z_fixed_buffer);
@@ -416,32 +402,32 @@ namespace MatjesImager.Hardware
             _counterTask.Start();
         }
 
-        public void StartZScan(int frameRateHz, int volumeRate)
+        public void StartZScan(VolumeScanParams scanParams)
         {
             if (_isRunning)
                 throw new InvalidOperationException("Invoked StartZScan while ScanControl is running");
             LoadWaveformSettings();
-            _sampleRate = frameRateHz * _samplesPerFrame;
-            // Ensure that our volume rate isn't larger than our camera frame-rate and that the frame rate is divisible by the volume rate
-            System.Diagnostics.Debug.Assert(frameRateHz >= volumeRate && frameRateHz % volumeRate == 0);
+            _sampleRate = scanParams.CameraFrameRate * _samplesPerFrame;
+            // Fix our sheet extent to current settings as it is constant during volume scans
+            var sheetParams = new SheetParams(Sheet1LeftVolts, Sheet1RightVolts, Sheet2LeftVolts, Sheet2RightVolts);
             // Calculate the number of samples in each volume sweep
-            _z_period_samples = frameRateHz / volumeRate * _samplesPerFrame;
+            _z_period_samples = scanParams.FramesPerVolume * _samplesPerFrame;
             // For z-scan there is no direct user control. Generate 250 ms worth of samples ahead of time
             _samples_to_generate = (int)(_sampleRate / 4);
             _isRunning = true;
             _cancellationTokenSource?.Dispose();
             _cancellationTokenSource = new CancellationTokenSource();
-            NITaskSetup(frameRateHz);
-            double[,] sheetBuffer = GenerateSheetTriangleBuffer(_samples_to_generate * _buffer_mult);
-            double[,] z_sweep_buffer = GenerateScanZBuffer(_samples_to_generate * _buffer_mult);
+            NITaskSetup(scanParams.CameraFrameRate);
+            double[,] sheetBuffer = GenerateSheetTriangleBuffer(_samples_to_generate * _buffer_mult, sheetParams.Sheet1LeftVolts, sheetParams.Sheet1RightVolts, sheetParams.Sheet2LeftVolts, sheetParams.Sheet2RightVolts);
+            double[,] z_sweep_buffer = GenerateScanZBuffer(_samples_to_generate * _buffer_mult, scanParams);
             _sheetWriter.WriteMultiSample(false, sheetBuffer);
             _zWriter.WriteMultiSample(false, z_sweep_buffer);
             // Start AO tasks - they will wait on the counter for triggering
             _aoTask_sheet.Start();
             _aoTask_Z.Start();
             // Start the ao task loops
-            System.Threading.Tasks.Task.Run(() => ScanSheetLoop(_cancellationTokenSource.Token));
-            System.Threading.Tasks.Task.Run(() => ScanZLoop(_cancellationTokenSource.Token));
+            System.Threading.Tasks.Task.Run(() => ScanSheetLoop(_cancellationTokenSource.Token, sheetParams));
+            System.Threading.Tasks.Task.Run(() => ScanZLoop(_cancellationTokenSource.Token, scanParams));
             // Pull trigger on everything by starting counter (NOTE: This includes the camera)
             _counterTask.Start();
         }
@@ -501,7 +487,7 @@ namespace MatjesImager.Hardware
         /// <param name="vMin2">The lowest value for the second triangle wave</param>
         /// <param name="vMax2">The highest value for the second triangle wave</param>
         /// <returns>The analog out buffer</returns>
-        private double[,] GenerateSheetTriangleBuffer(int totalSamples)
+        private double[,] GenerateSheetTriangleBuffer(int totalSamples, double sheet1left, double sheet1right, double sheet2left, double sheet2right)
         {
             // TODO: To make this work for both idle and z-scan, the sheet voltages should be parameters as they need to be fixed for experimental z-scanning!
             double[,] buffer = new double[2, totalSamples];
@@ -513,10 +499,10 @@ namespace MatjesImager.Hardware
                 long cycleSample = _sheet_sample_index % samplesPerCycle;
                 double phase = (double)cycleSample / samplesPerCycle;
 
-                voltage = Sheet1LeftVolts + ScanWaveforms.SmoothTriangle(phase, _sheetTurnAround) * (Sheet1RightVolts - Sheet1LeftVolts);
+                voltage = sheet1left + ScanWaveforms.SmoothTriangle(phase, _sheetTurnAround) * (sheet1right - sheet1left);
                 buffer[0, i] = voltage;
 
-                voltage = Sheet2LeftVolts + ScanWaveforms.SmoothTriangle(phase, _sheetTurnAround) * (Sheet2RightVolts - Sheet2LeftVolts);
+                voltage = sheet2left + ScanWaveforms.SmoothTriangle(phase, _sheetTurnAround) * (sheet2right - sheet2left);
                 buffer[1, i] = voltage;
                 _sheet_sample_index++;
             }
@@ -541,11 +527,8 @@ namespace MatjesImager.Hardware
             return buffer;
         }
 
-        private double[,] GenerateScanZBuffer(int totalSamples)
+        private double[,] GenerateScanZBuffer(int totalSamples, VolumeScanParams scanparams)
         {
-            // TODO: The following are only test-values, needs to be provided by the user eventually
-            const double Piezo_start_um = 25;
-            const double Piezo_end_um = 300;
 
             double piezoMaxVolts = Settings.Default.PiezoMaxVolts;
             double piezoRangeMicrons = Settings.Default.PiezoRangeMicrons;
@@ -559,13 +542,13 @@ namespace MatjesImager.Hardware
                 long cycleSample = _z_sample_index % _z_period_samples;
                 double phase = (double)cycleSample / _z_period_samples;
 
-                piezo_um = Piezo_start_um + ScanWaveforms.Sawtooth(phase, _piezoSawtoothShape)*(Piezo_end_um - Piezo_start_um);
+                piezo_um = scanparams.StartMicrons + ScanWaveforms.Sawtooth(phase, _piezoSawtoothShape)*scanparams.DepthMicrons;
                 voltage = piezo_um / piezoRangeMicrons * piezoMaxVolts;
                 if (voltage > piezoMaxVolts)
                     voltage = piezoMaxVolts;
                 buffer[2, i] = voltage;  // Piezo is the last channel
-                buffer[0, i] = _convertZPosition_sheet1.ConvertPiezoToZ(piezo_um);
-                buffer[1, i] = _convertZPosition_sheet2.ConvertPiezoToZ(piezo_um);
+                buffer[0, i] = scanparams.ZConverterSheet1.ConvertPiezoToZ(piezo_um);
+                buffer[1, i] = scanparams.ZConverterSheet2.ConvertPiezoToZ(piezo_um);
                 _z_sample_index++;
             }
 

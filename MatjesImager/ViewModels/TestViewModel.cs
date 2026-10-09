@@ -139,7 +139,7 @@ namespace MatjesImager.ViewModels
             Z1_Fixed = 0;
             Z2_Fixed = 0;
             Piezo_Fixed = 0;
-            Scanhead = new ScanControl(new LinearZConverter(-4.0/450, 2, 10, -10), new LinearZConverter(-4.0/450, 2, 10, -10));
+            Scanhead = new ScanControl();
             if (IsInDesignMode)
                 return;
             // TODO: Before connecting to Piezo we need to write 0V to the Piezo AO
@@ -156,7 +156,8 @@ namespace MatjesImager.ViewModels
             StopAcquisition();
             Scanhead.Stop();
             StartAcquisition();
-            Scanhead.StartZScan(100, 1);
+            var scanParams = new VolumeScanParams(100, 100, 5, 400, VolumeScanType.ScanOnly, new LinearZConverter(-4.0 / 450, 2, 10, -10), new LinearZConverter(-4.0 / 450, 2, 10, -10));
+            Scanhead.StartZScan(scanParams);
         }
 
         /// <summary>
