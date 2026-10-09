@@ -32,19 +32,19 @@ namespace MatjesImager.ViewModels
         public const int MinimumPointsToAccept = 3;
 
         /// <summary>
-        /// The maximum command voltage of the z-mirrors (matches the range of the z-mirror AO channels in ScanControl)
+        /// The maximum command voltage of the z-mirrors (the mirror AO range from the application settings, as used by ScanControl)
         /// </summary>
-        public const double Z_V_Max = 5;
+        public static double Z_V_Max => Properties.Settings.Default.MirrorMaxVolts;
 
         /// <summary>
-        /// The minimum command voltage of the z-mirrors (matches the range of the z-mirror AO channels in ScanControl)
+        /// The minimum command voltage of the z-mirrors (the mirror AO range from the application settings, as used by ScanControl)
         /// </summary>
-        public const double Z_V_Min = -5;
+        public static double Z_V_Min => Properties.Settings.Default.MirrorMinVolts;
 
         /// <summary>
         /// The travel range of the piezo in microns
         /// </summary>
-        public const double PiezoMaxMicrons = 450;
+        public static double PiezoMaxMicrons => Properties.Settings.Default.PiezoRangeMicrons;
 
         /// <summary>
         /// Two calibration points closer than this (in microns) are considered to be at the same piezo position
@@ -98,7 +98,7 @@ namespace MatjesImager.ViewModels
             if (IsInDesignMode)
                 return;
             _scanhead.SetAllAOZero();
-            PiezoConfig.ConfigurePPC001("44506384");// Set Closed loop, external BNC control and corrected position report on Piezo
+            PiezoConfig.ConfigurePPC001(Properties.Settings.Default.PiezoSerialNumber);// Set Closed loop, external BNC control and corrected position report on Piezo
             _camera = new CameraStream();
             // Camera has to be armed before the scanhead starts the trigger counter
             _camera.Start();

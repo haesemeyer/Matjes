@@ -40,7 +40,7 @@
         <!-- Position controls -->
         <StackPanel Grid.Row="0" Grid.Column="0" Margin="10">
             <TextBlock Text="Objective piezo (um)" Style="{StaticResource SectionHeader}" Margin="0,0,0,4"/>
-            <Slider Minimum="0" Maximum="450" SmallChange="1" LargeChange="10" TickFrequency="50" TickPlacement="BottomRight"
+            <Slider Minimum="0" Maximum="{Binding Scanhead.PiezoRangeMicrons}" SmallChange="1" LargeChange="10" TickFrequency="50" TickPlacement="BottomRight"
                     Value="{Binding Scanhead.Piezo_Fixed_Microns}"/>
             <TextBox Width="80" HorizontalAlignment="Left" Text="{Binding Scanhead.Piezo_Fixed_Microns, StringFormat=F1}"/>
 
