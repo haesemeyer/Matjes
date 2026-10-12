@@ -11,7 +11,6 @@ namespace MatjesImager.Hardware
     /// <summary>
     /// Encapsulates hardware triggered acquisition from the Fusion camera, conversion of the 16-bit
     /// camera frames to 8-bit display images and writing them to a display source.
-    /// Acquisition logic follows TestViewModel but is kept in its own class so that multiple views can share it.
     /// NOTE: The camera waits on the counter of ScanControl for triggering, so Start has to be called before
     /// starting a scan on the ScanControl object
     /// </summary>
@@ -184,6 +183,22 @@ namespace MatjesImager.Hardware
                     return null;
                 var copy = new Image8(_camImage.Size);
                 ipp.ip.ippiCopy_8u_C1R(_camImage.Image, _camImage.Stride, copy.Image, copy.Stride, _camImage.Size);
+                return copy;
+            }
+        }
+
+        /// <summary>
+        /// Returns a copy of the most recent 16-bit camera frame or null if no frame has been received yet.
+        /// The caller owns (and has to dispose) the returned image
+        /// </summary>
+        public Image16? CopyLatestRawFrame()
+        {
+            lock (_frameLock)
+            {
+                if (_camImage16 == null || FrameIndex == 0)
+                    return null;
+                var copy = new Image16(_camImage16.Width, _camImage16.Height);
+                ipp.ip.ippiCopy_16u_C1R(_camImage16.Image, _camImage16.Stride, copy.Image, copy.Stride, _camImage16.Size);
                 return copy;
             }
         }

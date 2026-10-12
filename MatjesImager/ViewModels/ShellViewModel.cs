@@ -13,11 +13,6 @@ namespace MatjesImager.ViewModels
     /// </summary>
     public class ShellViewModel : ViewModelBase
     {
-        /// <summary>
-        /// The camera frame rate of the idle scan used in preview
-        /// </summary>
-        public const int PreviewFrameRateHz = 100;
-
         private StepViewModel? _selectedStep;
 
         private string _statusMessage = "";
@@ -25,11 +20,11 @@ namespace MatjesImager.ViewModels
         public ShellViewModel()
         {
             Positions = new PositionsViewModel();
+            Preview = new PreviewViewModel();
             ZCalibration = new ZCalibrationViewModel();
             Steps = new ObservableCollection<StepViewModel>
             {
-                new PlaceholderStepViewModel(1, "Find sample", MicroscopeMode.Preview,
-                    "Use the position controls to find the sample and bring both sheets into focus. A dedicated panel for this step is not built yet."),
+                Preview,
                 new PlaceholderStepViewModel(2, "ROI", MicroscopeMode.Preview,
                     "Selecting the camera region of interest is not built yet."),
                 ZCalibration,
@@ -57,6 +52,11 @@ namespace MatjesImager.ViewModels
         /// The shared position controls shown for steps that run in preview
         /// </summary>
         public PositionsViewModel Positions { get; }
+
+        /// <summary>
+        /// The preview step, which also holds the preview settings shared by all steps running in preview
+        /// </summary>
+        public PreviewViewModel Preview { get; }
 
         /// <summary>
         /// The z-calibration step
@@ -113,15 +113,16 @@ namespace MatjesImager.ViewModels
                 return true;
             try
             {
-                LightSheet.Stop();
                 switch (mode)
                 {
                     case MicroscopeMode.Preview:
-                        LightSheet.StartIdleScan(PreviewFrameRateHz);
+                        Preview.StartPreview();
                         break;
                     case MicroscopeMode.Off:
+                        LightSheet.Stop();
                         break;
                     default:
+                        LightSheet.Stop();
                         // Volume scans need parameters only the step itself has, so such steps start the scan themselves
                         throw new NotSupportedException($"The shell cannot enter {mode} mode.");
                 }
