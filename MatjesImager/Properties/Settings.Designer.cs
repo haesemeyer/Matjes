@@ -329,5 +329,29 @@ namespace MatjesImager.Properties {
                 this["PiezoSawtoothShape"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("ai1")]
+        public string AIPiezo {
+            get {
+                return ((string)(this["AIPiezo"]));
+            }
+            set {
+                this["AIPiezo"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("ai0")]
+        public string AICounter {
+            get {
+                return ((string)(this["AICounter"]));
+            }
+            set {
+                this["AICounter"] = value;
+            }
+        }
     }
 }

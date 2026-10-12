@@ -59,5 +59,11 @@
     <Setting Name="PiezoSawtoothShape" Description="Fraction of each piezo sawtooth period spent on the rising (imaging) flank" Type="System.Double" Scope="User">
       <Value Profile="(Default)">0.9</Value>
     </Setting>
+    <Setting Name="AIPiezo" Type="System.String" Scope="User">
+      <Value Profile="(Default)">ai1</Value>
+    </Setting>
+    <Setting Name="AICounter" Type="System.String" Scope="User">
+      <Value Profile="(Default)">ai0</Value>
+    </Setting>
   </Settings>
 </SettingsFile>
