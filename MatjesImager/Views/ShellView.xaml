@@ -13,6 +13,9 @@
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
         <ViewModels:ShellViewModel x:Key="DataSource"/>
         <!-- The panel of each step type. WPF recreates these visuals on each switch, all state lives in the step view models -->
+        <DataTemplate DataType="{x:Type ViewModels:PreviewViewModel}">
+            <local:PreviewView/>
+        </DataTemplate>
         <DataTemplate DataType="{x:Type ViewModels:ZCalibrationViewModel}">
             <local:ZCalibrationView/>
         </DataTemplate>
