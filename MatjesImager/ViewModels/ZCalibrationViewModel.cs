@@ -16,8 +16,9 @@ namespace MatjesImager.ViewModels
     /// The user sets a piezo position, focuses both sheets and stores the result as a calibration point.
     /// For each sheet the relationship V = slope * um + offset is fit by least squares across all stored points.
     /// Since the piezo position is set precisely and the sheet voltage is judged by eye, the fit minimizes the error in voltage.
+    /// Runs in preview: positions are set with the shell's shared position controls.
     /// </summary>
-    public class ZCalibrationViewModel : ViewModelBase
+    public class ZCalibrationViewModel : StepViewModel
     {
         #region Constants
 
@@ -34,12 +35,12 @@ namespace MatjesImager.ViewModels
         /// <summary>
         /// The maximum command voltage of the z-mirrors (the mirror AO range from the application settings, as used by ScanControl)
         /// </summary>
-        public static double Z_V_Max => Properties.Settings.Default.MirrorMaxVolts;
+        public static double Z_V_Max => PositionsViewModel.Z_V_Max;
 
         /// <summary>
         /// The minimum command voltage of the z-mirrors (the mirror AO range from the application settings, as used by ScanControl)
         /// </summary>
-        public static double Z_V_Min => Properties.Settings.Default.MirrorMinVolts;
+        public static double Z_V_Min => PositionsViewModel.Z_V_Min;
 
         /// <summary>
         /// The travel range of the piezo in microns
@@ -67,8 +68,6 @@ namespace MatjesImager.ViewModels
 
         private bool _followFit = true;
 
-        private double _zStepVolts = 0.005;
-
         private double _residualWarningMicrons = 2.5;
 
         private string _statusMessage = "";
@@ -84,16 +83,12 @@ namespace MatjesImager.ViewModels
 
         #endregion
 
-        public ZCalibrationViewModel()
+        public ZCalibrationViewModel() : base(3, "Z calibration", MicroscopeMode.Preview)
         {
             CalibrationPoints = new ObservableCollection<CalibrationPoint>();
             for (int i = 0; i < NumCalibrationPoints; i++)
                 CalibrationPoints.Add(new CalibrationPoint(i + 1));
             StatusMessage = "Move the piezo into the sample, focus both sheets and add a calibration point.";
-            if (IsInDesignMode)
-                return;
-            Scanhead.PropertyChanged += Scanhead_PropertyChanged;
-            lightSheet.StartIdleScan(100);
         }
 
         #region Properties
@@ -102,11 +97,6 @@ namespace MatjesImager.ViewModels
         /// Control of mirrors and piezo. During calibration the idle scan is used, i.e. fixed piezo and sheet z-positions
         /// </summary>
         public ScanControl Scanhead => lightSheet.ScanHead;
-
-        /// <summary>
-        /// The live camera stream
-        /// </summary>
-        public CameraStream? Camera => lightSheet.Camera;
 
         /// <summary>
         /// The calibration slots
@@ -172,15 +162,6 @@ namespace MatjesImager.ViewModels
         {
             get { return _followFit; }
             set { _followFit = value; RaisePropertyChanged(nameof(FollowFit)); }
-        }
-
-        /// <summary>
-        /// The voltage step of the fine z-adjustment buttons
-        /// </summary>
-        public double ZStepVolts
-        {
-            get { return _zStepVolts; }
-            set { _zStepVolts = Math.Abs(value); RaisePropertyChanged(nameof(ZStepVolts)); }
         }
 
         /// <summary>
@@ -293,22 +274,6 @@ namespace MatjesImager.ViewModels
         }
 
         /// <summary>
-        /// Moves the z-position of sheet 1 by a number of fine steps
-        /// </summary>
-        public void NudgeZ1(int steps)
-        {
-            Scanhead.Z1_Fixed = Math.Clamp(Scanhead.Z1_Fixed + steps * ZStepVolts, Z_V_Min, Z_V_Max);
-        }
-
-        /// <summary>
-        /// Moves the z-position of sheet 2 by a number of fine steps
-        /// </summary>
-        public void NudgeZ2(int steps)
-        {
-            Scanhead.Z2_Fixed = Math.Clamp(Scanhead.Z2_Fixed + steps * ZStepVolts, Z_V_Min, Z_V_Max);
-        }
-
-        /// <summary>
         /// Generates the calibration objects from the current fits and raises CalibrationAccepted
         /// </summary>
         public void AcceptCalibration()
@@ -321,6 +286,8 @@ namespace MatjesImager.ViewModels
             Sheet1Converter = new LinearZConverter(Fit1!.Slope, Fit1.Offset, Z_V_Max, Z_V_Min);
             Sheet2Converter = new LinearZConverter(Fit2!.Slope, Fit2.Offset, Z_V_Max, Z_V_Min);
             StatusMessage = $"Calibration accepted. Sheet 1: R2 = {Fit1.RSquared:F4}, sheet 2: R2 = {Fit2.RSquared:F4}.";
+            State = StepState.Done;
+            StateHint = "Calibration accepted";
             CalibrationAccepted?.Invoke(this, EventArgs.Empty);
         }
 
@@ -329,7 +296,7 @@ namespace MatjesImager.ViewModels
         /// </summary>
         private EZImageSource? TakeSnapshot()
         {
-            using var frame = Camera?.CopyLatestFrame();
+            using var frame = lightSheet.Camera?.CopyLatestFrame();
             if (frame == null)
                 return null;
             var snapshot = new EZImageSource_LH();
@@ -381,6 +348,21 @@ namespace MatjesImager.ViewModels
             RaisePropertyChanged(nameof(CanAccept));
         }
 
+        /// <summary>
+        /// The sheets only follow the fit while this step is shown
+        /// </summary>
+        protected override void OnActivated()
+        {
+            if (!IsInDesignMode)
+                Scanhead.PropertyChanged += Scanhead_PropertyChanged;
+        }
+
+        protected override void OnDeactivated()
+        {
+            if (!IsInDesignMode)
+                Scanhead.PropertyChanged -= Scanhead_PropertyChanged;
+        }
+
         private void Scanhead_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName != nameof(ScanControl.Piezo_Fixed_Microns) || !FollowFit || _suppressFollow)
@@ -400,11 +382,8 @@ namespace MatjesImager.ViewModels
         {
             if (!IsDisposed && disposing)
             {
-                if (!IsInDesignMode)
-                {
-                    Scanhead.PropertyChanged -= Scanhead_PropertyChanged;
-                    lightSheet.Stop();
-                }
+                // The shell owns the microscope's mode, so the step only releases its own resources
+                Deactivate();
                 foreach (var p in CalibrationPoints)
                     p.Dispose();
             }
