@@ -5,13 +5,41 @@ using System.Text;
 
 namespace MatjesImager.Hardware
 {
+    /// <summary>
+    /// What the microscope is currently doing
+    /// </summary>
+    public enum MicroscopeMode { Off = 0, Preview = 1, VolumeScan = 2 }
+
     public unsafe class Microscope : PropertyChangeNotification, IDisposable
     {
-        private bool _isRunning = false;
+        private MicroscopeMode _mode = MicroscopeMode.Off;
+
+        private CameraStream? _camera;
 
         public ScanControl ScanHead { get; private set; }
 
-        public CameraStream? Camera { get; private set;  }
+        /// <summary>
+        /// The camera stream of the current scan. A new stream is created on each scan start and it is null while stopped
+        /// </summary>
+        public CameraStream? Camera
+        {
+            get { return _camera; }
+            private set { _camera = value; RaisePropertyChanged(nameof(Camera)); }
+        }
+
+        /// <summary>
+        /// The current mode: Preview is the idle scan with fixed, user-set positions
+        /// </summary>
+        public MicroscopeMode Mode
+        {
+            get { return _mode; }
+            private set { _mode = value; RaisePropertyChanged(nameof(Mode)); RaisePropertyChanged(nameof(IsRunning)); }
+        }
+
+        /// <summary>
+        /// Indicates whether a scan is running
+        /// </summary>
+        public bool IsRunning => Mode != MicroscopeMode.Off;
 
         public Microscope() : this(designInstance: false) { }
 
@@ -38,36 +66,36 @@ namespace MatjesImager.Hardware
 
         public void StartIdleScan(int frameRateHz)
         {
-            if (_isRunning)
+            if (IsRunning)
                 throw new InvalidOperationException("Cannot start new scan while microscope is running");
             Camera = new CameraStream();
             // Camera has to be armed before the scanhead starts the trigger counter
             Camera.Start();
             ScanHead.StartIdleScan(frameRateHz);
-            _isRunning = true;
+            Mode = MicroscopeMode.Preview;
         }
 
         public void StartVolumeScan(VolumeScanParams scanParams)
         {
-            if (_isRunning)
+            if (IsRunning)
                 throw new InvalidOperationException("Cannot start new scan while microscope is running");
             Camera = new CameraStream();
             // Camera has to be armed before the scanhead starts the trigger counter
             Camera.Start();
             ScanHead.StartZScan(scanParams);
-            _isRunning = true;
+            Mode = MicroscopeMode.VolumeScan;
         }
 
         public void Stop()
         {
-            if (!_isRunning)
+            if (!IsRunning)
                 return;
             Camera?.Stop();
             ScanHead.Stop();
             ScanHead.SetAllAOZero();
             Camera?.Dispose();
             Camera = null;
-            _isRunning = false;
+            Mode = MicroscopeMode.Off;
         }
 
         #region IDisposable

@@ -6,10 +6,8 @@
         xmlns:local="clr-namespace:MatjesImager"
         xmlns:Views="clr-namespace:MatjesImager.Views" x:Class="MatjesImager.MainWindow"
         mc:Ignorable="d"
-        Title="MainWindow" Height="820" Width="1250">
+        Title="Matjes" Height="900" Width="1400">
     <Grid>
-        <!-- TestView and ZCalibrationView both open the camera and DAQ boards, so only one can be hosted at a time -->
-        <!--<Views:TestView HorizontalAlignment="Center" Margin="0,74,0,0" VerticalAlignment="Top"/>-->
-        <Views:ZCalibrationView/>
+        <Views:ShellView/>
     </Grid>
 </Window>
