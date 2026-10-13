@@ -16,6 +16,11 @@ namespace MatjesUtils
         //The maximum allowed element number
         public int MaxCount { get; protected set; }
 
+        /// <summary>
+        /// If true, an exception will be raised when a buffer overflow occurs
+        /// </summary>
+        public bool ThrowOnOverflow { get; protected set; }
+
         public ProducerConsumer()
         {
             MaxCount = 100;
@@ -30,6 +35,7 @@ namespace MatjesUtils
         /// Puts an item on the queue. Locks access to the queue and pulses the lock to signal consumers. Clears the queue if maxcount reached
         /// </summary>
         /// <param name="item">The item to add to the queue</param>
+        /// <exception cref="OverflowException">If ThrowOnOverflow is set, will raise OverflowException if there is a buffer overflow</exception>
         public void Produce(T item)
         {
             lock (queueLock)
@@ -37,12 +43,10 @@ namespace MatjesUtils
                 if (queue.Count > MaxCount)
                 {
                     queue.Clear();
-                    System.Diagnostics.Debug.WriteLine("Overflow, queue was cleared.");
+                    if (ThrowOnOverflow)
+                        throw new OverflowException("Overflow, queue was cleared.");
                 }
                 queue.Enqueue(item);
-                
-                /*if(queue.Count>1)
-                    System.Diagnostics.Debug.WriteLine(String.Format("{0} items in queue.", queue.Count));*/
                 
                 //signal waiting threads that we will release the lock
                 Monitor.Pulse(queueLock);
@@ -70,16 +74,17 @@ namespace MatjesUtils
         /// If stop is signaled, the method will immediately return allowing the thread to stop rather than entering deadlock
         /// once the producer is retired.
         /// </summary>
-        /// <param name="stop">The event to signal to leave the method</param>
+        /// <param name="token">The event to signal to leave the method</param>
         /// <returns>Returns the next item from the queue</returns>
-        public virtual T Consume(AutoResetEvent stop)
+        /// <exception cref="OperationCanceledException">If requested to cancel will throw</exception>
+        public virtual T Consume(CancellationToken token)
         {
             lock (queueLock)
             {
                 while (queue.Count == 0)
                 {
-                    //If we are told to stop then we return null/default
-                    if (stop.WaitOne(0))
+                    //If we are told to stop then we raise
+                    if (token.IsCancellationRequested)
                         throw new OperationCanceledException("Consume signaled to stop");
                     //We wait for a pulse for 100ms. After that we independently try to reacquire the lock.
                     //This way if the the producer has retired we are not indefinitely stuck on the wait and can listen
