@@ -102,7 +102,7 @@ namespace MatjesImager.Hardware
         /// <summary>
         /// The calculated current sample rate across all tasks and devices
         /// </summary>
-        private double _sampleRate;
+        private int _sampleRate;
 
         /// <summary>
         /// Counts the total number of generated samples for the sheet waveforms
