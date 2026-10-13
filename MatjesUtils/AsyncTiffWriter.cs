@@ -14,27 +14,24 @@ namespace MatjesUtils
 
         private ProducerConsumer<Image8> _imageQueue;
 
-        private AutoResetEvent _taskStop;
-
-        private Task _writeTask;
+        private CancellationTokenSource _cancellationTokenSource;
 
         public AsyncTiffWriter(string fileName)
         {
             _tiffWriter = new TiffWriter(fileName);
             _imageQueue = new ProducerConsumer<Image8>(4000);
-            _taskStop = new AutoResetEvent(false);
-            _writeTask = new Task(TaskRun);
-            _writeTask.Start();
+            _cancellationTokenSource = new CancellationTokenSource();
+            System.Threading.Tasks.Task.Run(() => TaskRun(_cancellationTokenSource.Token));
         }
 
-        private void TaskRun()
+        private void TaskRun(CancellationToken token)
         {
             Image8 nextImage;
             while (true)
             {
                 try
                 {
-                    nextImage = _imageQueue.Consume(_taskStop);
+                    nextImage = _imageQueue.Consume(token);
                 }
                 catch (OperationCanceledException)
                 {
@@ -65,13 +62,9 @@ namespace MatjesUtils
             if (IsDisposed)
                 return;
             //Signal to our task to stop
-            _taskStop.Set();
-            //Wait on task and then dispose task and tiff writer
-            if (!_writeTask.Wait(5000))
-                System.Diagnostics.Debug.WriteLine("Timed out waiting for write task to finish");
-            _writeTask.Dispose();
+            _cancellationTokenSource.Cancel();
             _tiffWriter.Dispose();
-            _taskStop.Dispose();
+            _cancellationTokenSource.Dispose();
             IsDisposed = true;
         }
     }
