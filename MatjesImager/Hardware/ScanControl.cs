@@ -223,8 +223,8 @@ namespace MatjesImager.Hardware
         /// </summary>
         public double Piezo_Fixed_Microns
         {
-            get { return _piezo_fixed_volts / Settings.Default.PiezoMaxVolts * Settings.Default.PiezoRangeMicrons; }
-            set { _piezo_fixed_volts = value / Settings.Default.PiezoRangeMicrons * Settings.Default.PiezoMaxVolts; RaisePropertyChanged(nameof(Piezo_Fixed_Microns)); }
+            get { return PiezoConfig.VoltsToMicrons(_piezo_fixed_volts); }
+            set { _piezo_fixed_volts = PiezoConfig.MicronsToVolts(value); RaisePropertyChanged(nameof(Piezo_Fixed_Microns)); }
         }
 
         /// <summary>
@@ -531,7 +531,6 @@ namespace MatjesImager.Hardware
         {
 
             double piezoMaxVolts = Settings.Default.PiezoMaxVolts;
-            double piezoRangeMicrons = Settings.Default.PiezoRangeMicrons;
 
             double[,] buffer = new double[3, totalSamples];
             double voltage;
@@ -543,7 +542,7 @@ namespace MatjesImager.Hardware
                 double phase = (double)cycleSample / _z_period_samples;
 
                 piezo_um = scanparams.StartMicrons + ScanWaveforms.Sawtooth(phase, _piezoSawtoothShape)*scanparams.DepthMicrons;
-                voltage = piezo_um / piezoRangeMicrons * piezoMaxVolts;
+                voltage = PiezoConfig.MicronsToVolts(piezo_um);
                 if (voltage > piezoMaxVolts)
                     voltage = piezoMaxVolts;
                 buffer[2, i] = voltage;  // Piezo is the last channel
