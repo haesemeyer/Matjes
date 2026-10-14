@@ -28,6 +28,7 @@ namespace MatjesUtils
         public ProducerConsumer(int maxCount, bool throw_on_overflow)
         {
             MaxCount = maxCount;
+            ThrowOnOverflow = throw_on_overflow;
         }
 
         /// <summary>
