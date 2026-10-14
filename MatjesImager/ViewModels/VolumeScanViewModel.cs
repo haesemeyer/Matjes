@@ -14,7 +14,7 @@ namespace MatjesImager.ViewModels
     /// Workflow step 4: sets up the volume scan and tests it. The user sets the stack range, the plane spacing and the volume rate,
     /// from which the frames per volume and the camera frame rate follow (the preview frame rate does not carry over).
     /// A test runs the volume scan while recording the piezo read-back, finds the part of the sawtooth in which the piezo
-    /// moves at constant velocity and proposes the frames (planes) within each volume to keep. The scan keeps running after the
+    /// moves at constant velocity (planes evenly spaced) and proposes the frames (planes) within each volume to keep. The scan keeps running after the
     /// test so that individual planes can be inspected. Accepting stores the configuration for the experiment step
     /// </summary>
     public class VolumeScanViewModel : StepViewModel
@@ -66,6 +66,13 @@ namespace MatjesImager.ViewModels
         private double _requestedVolumeRateHz = 1;
 
         private int _testVolumes = DefaultTestVolumes;
+
+        private double _tolerancePercent = PiezoLinearity.DefaultPositionTolerance * 100;
+
+        /// <summary>
+        /// The read-back of the last completed test and what is needed to analyze it again, null before the first
+        /// </summary>
+        private (double[] readbackVolts, VolumeScanParams scanParams, int samplesPerFrame, int averaged, double shape)? _lastRecording;
 
         private string _statusMessage = "";
 
@@ -199,6 +206,24 @@ namespace MatjesImager.ViewModels
         }
 
         /// <summary>
+        /// The largest deviation of a plane from an evenly spaced grid still counted as linear, in percent of the plane spacing.
+        /// Changing it analyzes the last test again, which proposes new planes to keep
+        /// </summary>
+        public double TolerancePercent
+        {
+            get { return _tolerancePercent; }
+            set
+            {
+                double tolerance = Math.Clamp(value, 1, 100);
+                bool changed = tolerance != _tolerancePercent;
+                _tolerancePercent = tolerance;
+                RaisePropertyChanged(nameof(TolerancePercent));
+                if (changed)
+                    Reanalyze();
+            }
+        }
+
+        /// <summary>
         /// The frames per volume that give the requested plane spacing: the piezo covers the depth during the
         /// imaging flank, which lasts SawtoothShape of the volume
         /// </summary>
@@ -316,7 +341,7 @@ namespace MatjesImager.ViewModels
         public bool HasValidResult => Result?.IsValid == true;
 
         /// <summary>
-        /// The plane spacing measured from the read-back velocity, NaN without a result
+        /// The plane spacing measured from the read-back (slope of the fitted plane grid), NaN without a result
         /// </summary>
         public double MeasuredPlaneSpacingMicrons => HasValidResult && _testedParams != null
             ? Result!.VelocityMicronsPerSample * ReadbackSamplesPerFrame : double.NaN;
@@ -496,6 +521,7 @@ namespace MatjesImager.ViewModels
             _runningParams = scanParams;
             // The previous result belongs to other scan settings
             _testedParams = null;
+            _lastRecording = null;
             CommandTrace = [];
             ReadbackTrace = [];
             Result = null;
@@ -631,12 +657,13 @@ namespace MatjesImager.ViewModels
             IsAnalyzing = true;
             StatusMessage = "Analyzing the piezo read-back...";
             PiezoLinearityResult result;
+            int samplesPerFrame = ReadbackSamplesPerFrame;
+            int averaged = Microscope.HardwareReadSamplesToAverage;
+            double shape = SawtoothShape;
+            double tolerance = TolerancePercent / 100;
             try
             {
-                int samplesPerFrame = ReadbackSamplesPerFrame;
-                int averaged = Microscope.HardwareReadSamplesToAverage;
-                double shape = SawtoothShape;
-                result = await System.Threading.Tasks.Task.Run(() => Analyze(readbackVolts, scanParams, samplesPerFrame, averaged, shape));
+                result = await System.Threading.Tasks.Task.Run(() => Analyze(readbackVolts, scanParams, samplesPerFrame, averaged, shape, tolerance));
             }
             catch (Exception ex)
             {
@@ -648,13 +675,17 @@ namespace MatjesImager.ViewModels
             }
             if (run != _testRun)
                 return; // A new test was started or the step was left in the meantime
+            _lastRecording = (readbackVolts, scanParams, samplesPerFrame, averaged, shape);
             ApplyResult(result, scanParams);
+            if (tolerance != TolerancePercent / 100)
+                Reanalyze(); // The tolerance changed during the analysis
         }
 
         /// <summary>
         /// Rebuilds the command waveform the scan head generated, converts the read-back to microns and finds the linear window
         /// </summary>
-        private static PiezoLinearityResult Analyze(double[] readbackVolts, VolumeScanParams scanParams, int samplesPerFrame, int averaged, double shape)
+        private static PiezoLinearityResult Analyze(double[] readbackVolts, VolumeScanParams scanParams, int samplesPerFrame, int averaged, double shape,
+            double tolerance)
         {
             int n = readbackVolts.Length;
             int samplesPerVolume = scanParams.FramesPerVolume * samplesPerFrame;
@@ -675,10 +706,31 @@ namespace MatjesImager.ViewModels
                 // NOTE: Assumes the controller's position monitor uses the same volts-to-microns scale as the command input
                 readback[i] = PiezoConfig.VoltsToMicrons(readbackVolts[i]);
             }
-            return PiezoLinearity.Analyze(command, readback, samplesPerVolume, samplesPerFrame, shape);
+            return PiezoLinearity.Analyze(command, readback, samplesPerVolume, samplesPerFrame, shape, positionTolerance: tolerance);
         }
 
-        private void ApplyResult(PiezoLinearityResult result, VolumeScanParams scanParams)
+        /// <summary>
+        /// Analyzes the last test's read-back again with the current tolerance. Does nothing while a test is recorded or
+        /// analyzed (it picks up the tolerance itself) or before the first test
+        /// </summary>
+        private void Reanalyze()
+        {
+            if (_lastRecording == null || IsTesting || IsAnalyzing)
+                return;
+            var (readbackVolts, scanParams, samplesPerFrame, averaged, shape) = _lastRecording.Value;
+            PiezoLinearityResult result;
+            try
+            {
+                result = Analyze(readbackVolts, scanParams, samplesPerFrame, averaged, shape, TolerancePercent / 100);
+            }
+            catch (Exception ex)
+            {
+                result = new PiezoLinearityResult { IsValid = false, Message = $"Analysis failed: {ex.Message}" };
+            }
+            ApplyResult(result, scanParams, keepDisplayPlane: true);
+        }
+
+        private void ApplyResult(PiezoLinearityResult result, VolumeScanParams scanParams, bool keepDisplayPlane = false)
         {
             _testedParams = scanParams;
             RaisePropertyChanged(nameof(MaxPlane));
@@ -693,7 +745,8 @@ namespace MatjesImager.ViewModels
             Result = result;
             if (result.IsValid)
             {
-                DisplayPlane = (result.FirstLinearPlane + result.LastLinearPlane) / 2;
+                if (!keepDisplayPlane)
+                    DisplayPlane = (result.FirstLinearPlane + result.LastLinearPlane) / 2;
                 StatusMessage = result.Message + " Check the planes and accept, or change the settings and test again.";
             }
             else

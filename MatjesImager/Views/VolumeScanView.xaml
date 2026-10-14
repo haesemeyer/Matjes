@@ -43,6 +43,7 @@
                 <RowDefinition/>
                 <RowDefinition/>
                 <RowDefinition/>
+                <RowDefinition/>
             </Grid.RowDefinitions>
             <TextBlock Grid.Row="0" Text="Start (um)" Style="{StaticResource Label}"
                        ToolTip="Piezo position at the start of the imaging (rising) flank of the sawtooth"/>
@@ -59,6 +60,9 @@
             <TextBlock Grid.Row="4" Text="Test volumes" Style="{StaticResource Label}"
                        ToolTip="Volumes analyzed by a test. One extra volume at the start is discarded while the piezo settles"/>
             <TextBox Grid.Row="4" Grid.Column="1" Style="{StaticResource Input}" Text="{Binding TestVolumes}"/>
+            <TextBlock Grid.Row="5" Text="Linearity tolerance (%)" Style="{StaticResource Label}"
+                       ToolTip="Largest deviation of a plane from an evenly spaced grid still counted as linear, in percent of the plane spacing. Changing it analyzes the last test again and proposes new planes to keep"/>
+            <TextBox Grid.Row="5" Grid.Column="1" Style="{StaticResource Input}" Text="{Binding TolerancePercent}"/>
         </Grid>
         <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" ToolTip="{Binding Source={x:Static ViewModels:VolumeScanViewModel.FramesPerVolumeNote}, Mode=OneWay}">
             <Run Text="{Binding FramesPerVolume, Mode=OneWay}"/>
