@@ -48,6 +48,29 @@ namespace MatjesImager.Hardware
 
         private double _image_scale_max = ushort.MaxValue;
 
+        private int _framesPerVolume = 0;
+
+        private double _nominalFrameRate = 0;
+
+        private int _displayEveryVolumes = 1;
+
+        private int _displayPlane = 0;
+
+        private int _missedFrames = 0;
+
+        private long _skippedFrames = 0;
+
+        #endregion
+
+        #region Constants
+
+        /// <summary>
+        /// The camera frame number of the frame exposed while z sample 0 was generated. With synchronous readout
+        /// the first trigger edge starts the first exposure and the next edge reads it out, so camera frame n is
+        /// exposed during z samples [n * SamplesPerFrame, (n + 1) * SamplesPerFrame). Change this if the rig shows an offset
+        /// </summary>
+        public const int FirstFrameNumber = 0;
+
         #endregion
 
         /// <summary>
@@ -113,9 +136,69 @@ namespace MatjesImager.Hardware
         /// </summary>
         public bool IsAcquiring => _isAcquiring;
 
+        /// <summary>
+        /// The number of frames per volume during a volume scan, 0 otherwise. Frame n is plane n % FramesPerVolume of
+        /// volume n / FramesPerVolume, which holds as long as the camera does not miss a trigger (see MissedFrames)
+        /// </summary>
+        public int FramesPerVolume => _framesPerVolume;
+
+        /// <summary>
+        /// During a volume scan only this plane is shown on the display, since every n-th frame would cycle through depths
+        /// </summary>
+        public int DisplayPlane
+        {
+            get { return _displayPlane; }
+            set
+            {
+                _displayPlane = _framesPerVolume > 0 ? Math.Clamp(value, 0, _framesPerVolume - 1) : 0;
+                RaisePropertyChanged(nameof(DisplayPlane));
+            }
+        }
+
+        /// <summary>
+        /// Triggers the camera did not answer with a frame, estimated from the frame timestamps. Only counted when the
+        /// nominal frame rate is known (volume scans). Any missed frame shifts the plane assignment of all later frames
+        /// </summary>
+        public int MissedFrames
+        {
+            get { return _missedFrames; }
+            private set { _missedFrames = value; RaisePropertyChanged(nameof(MissedFrames)); }
+        }
+
+        /// <summary>
+        /// Frames the camera delivered but that were not processed because processing fell behind.
+        /// These do not affect the plane assignment
+        /// </summary>
+        public long SkippedFrames
+        {
+            get { return _skippedFrames; }
+            private set { _skippedFrames = value; RaisePropertyChanged(nameof(SkippedFrames)); }
+        }
+
         #endregion
 
         #region Methods
+
+        /// <summary>
+        /// Prepares the stream for a volume scan: frames are tagged with their plane and only DisplayPlane is shown.
+        /// Has to be called before Start
+        /// </summary>
+        /// <param name="framesPerVolume">The number of frames per volume</param>
+        /// <param name="frameRateHz">The nominal camera frame rate, used to detect missed frames</param>
+        /// <param name="displayRateHz">The display shows the selected plane of at most about this many volumes per second</param>
+        public void ConfigureVolumeScan(int framesPerVolume, double frameRateHz, double displayRateHz = 10)
+        {
+            if (_isAcquiring)
+                throw new InvalidOperationException("Cannot configure a volume scan while camera acquisition is running");
+            ArgumentOutOfRangeException.ThrowIfLessThan(framesPerVolume, 1);
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(frameRateHz);
+            _framesPerVolume = framesPerVolume;
+            _nominalFrameRate = frameRateHz;
+            double volumeRate = frameRateHz / framesPerVolume;
+            _displayEveryVolumes = Math.Max(1, (int)Math.Round(volumeRate / displayRateHz));
+            DisplayPlane = _displayPlane;
+            RaisePropertyChanged(nameof(FramesPerVolume));
+        }
 
         /// <summary>
         /// Opens and arms the camera for hardware triggered acquisition and starts the receiving thread
@@ -207,23 +290,38 @@ namespace MatjesImager.Hardware
         {
             FrameIndex = 0;
             FrameRate = 0;
+            MissedFrames = 0;
+            SkippedFrames = 0;
             double all_deltas = 0;
             double current;
             double last = -1;
+            int lastFrameCount = 0;
             while (_isAcquiring && !token.IsCancellationRequested)
             {
                 if (_camera!.WaitForFrame(2000))
                 {
+                    // frameCount is the number of frames captured since the start, also those we did not get to process
                     _camera.GetTransferInfo(out int frameCount, out int newestFrameIndex);
                     DcamNative.DCAMBUF_FRAME frame = _camera.LockFrame(newestFrameIndex);
-                    ProcessFrame(frame.buf, frame.width, frame.height, frame.rowbytes, token);
+                    ProcessFrame(frame.buf, frame.width, frame.height, frame.rowbytes, frameCount - 1 - FirstFrameNumber, token);
                     current = frame.timestamp_sec + (double)frame.timestamp_microsec / 1000000.0;
                     if (last > 0)
                     {
                         all_deltas += current - last;
                         FrameRate = (double)FrameIndex / all_deltas;
+                        if (_nominalFrameRate > 0)
+                        {
+                            // More time passed than the frames that arrived account for: the camera missed triggers
+                            double expectedFrames = (current - last) * _nominalFrameRate;
+                            int arrivedFrames = frameCount - lastFrameCount;
+                            if (expectedFrames > arrivedFrames + 0.5)
+                                MissedFrames += (int)Math.Round(expectedFrames - arrivedFrames);
+                        }
                     }
+                    if (frameCount - FrameIndex != SkippedFrames)
+                        SkippedFrames = frameCount - FrameIndex;
                     last = current;
+                    lastFrameCount = frameCount;
                 }
                 else
                 {
@@ -232,7 +330,8 @@ namespace MatjesImager.Hardware
             }
         }
 
-        private void ProcessFrame(IntPtr unmanagedBuffer, int width, int height, int rowBytes, CancellationToken token)
+        /// <param name="frameNumber">The number of the frame since the start of the scan, which determines its plane during volume scans</param>
+        private void ProcessFrame(IntPtr unmanagedBuffer, int width, int height, int rowBytes, long frameNumber, CancellationToken token)
         {
             lock (_frameLock)
             {
@@ -248,8 +347,14 @@ namespace MatjesImager.Hardware
                 double min_value = -ImageScaleMin * scale_factor;
                 ipp.ip.ippiScaleC_16u8u_C1R(_camImage16.Image, _camImage16.Stride, scale_factor, min_value, _camImage.Image, _camImage.Stride, _camImage16.Size, ipp.IppHintAlgorithm.ippAlgHintFast);
             }
+            // During volume scans only the selected plane is shown, otherwise every DisplayEvery-th frame
+            bool display;
+            if (_framesPerVolume > 0)
+                display = frameNumber >= 0 && frameNumber % _framesPerVolume == _displayPlane && (frameNumber / _framesPerVolume) % _displayEveryVolumes == 0;
+            else
+                display = FrameIndex % DisplayEvery == 0;
             // Writing to the display only reads _camImage on this thread, which is also the only writer
-            if (FrameIndex % DisplayEvery == 0 && _display != null)
+            if (display && _display != null)
             {
                 try
                 {

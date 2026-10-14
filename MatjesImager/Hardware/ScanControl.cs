@@ -65,6 +65,11 @@ namespace MatjesImager.Hardware
         /// </summary>
         private CancellationTokenSource? _cancellationTokenSource;
 
+        /// <summary>
+        /// The running AO generation loops. Stop waits for them before it disposes the tasks they write to
+        /// </summary>
+        private readonly List<System.Threading.Tasks.Task> _loopTasks = new List<System.Threading.Tasks.Task>();
+
         private bool disposedValue;
 
         // NI-DAQmx Tasks
@@ -314,10 +319,13 @@ namespace MatjesImager.Hardware
         /// <exception cref="OperationCanceledException">Raises OperationCanceledException if cancellation was requested</exception>
         private void WaitForAOSpace(DaqStream stream, CancellationToken token) 
         {
-            while(stream.OutputBufferSpaceAvailable < _samplesPerFrame)
+            // Check for cancellation before touching the stream, since its task is disposed after stopping
+            while (true)
             {
                 if (token.IsCancellationRequested)
                     throw new OperationCanceledException();
+                if (stream.OutputBufferSpaceAvailable >= _samplesPerFrame)
+                    return;
                 System.Threading.Thread.Sleep(1);
             }
         }
@@ -398,7 +406,7 @@ namespace MatjesImager.Hardware
             _aoTask_sheet.Start();
             _aoTask_Z.Start();
             // Start the ao task loop
-            System.Threading.Tasks.Task.Run(() => IdleLoop(_cancellationTokenSource.Token));
+            _loopTasks.Add(System.Threading.Tasks.Task.Run(() => IdleLoop(_cancellationTokenSource.Token)));
             // Pull trigger on everything by starting counter (NOTE: This includes the camera)
             _counterTask.Start();
         }
@@ -427,8 +435,8 @@ namespace MatjesImager.Hardware
             _aoTask_sheet.Start();
             _aoTask_Z.Start();
             // Start the ao task loops
-            System.Threading.Tasks.Task.Run(() => ScanSheetLoop(_cancellationTokenSource.Token, sheetParams));
-            System.Threading.Tasks.Task.Run(() => ScanZLoop(_cancellationTokenSource.Token, scanParams));
+            _loopTasks.Add(System.Threading.Tasks.Task.Run(() => ScanSheetLoop(_cancellationTokenSource.Token, sheetParams)));
+            _loopTasks.Add(System.Threading.Tasks.Task.Run(() => ScanZLoop(_cancellationTokenSource.Token, scanParams)));
             // Pull trigger on everything by starting counter (NOTE: This includes the camera)
             _counterTask.Start();
         }
@@ -464,6 +472,11 @@ namespace MatjesImager.Hardware
             if (!_isRunning)
                 return;
             _cancellationTokenSource?.Cancel();
+            // Let the generation loops leave the AO tasks alone before stopping and disposing them.
+            // A loop that failed (e.g. on a DAQ error) must not keep us from stopping the hardware
+            try { System.Threading.Tasks.Task.WaitAll(_loopTasks.ToArray()); }
+            catch (AggregateException) { }
+            _loopTasks.Clear();
             _counterTask?.Stop();
             _aoTask_sheet?.Stop();
             _aoTask_Z?.Stop();

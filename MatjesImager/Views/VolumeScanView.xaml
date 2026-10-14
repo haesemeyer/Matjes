@@ -1,0 +1,135 @@
+﻿<UserControl
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:MatjesImager.Views"
+             xmlns:ViewModels="clr-namespace:MatjesImager.ViewModels" x:Class="MatjesImager.Views.VolumeScanView"
+             xmlns:Utils="clr-namespace:MatjesUtils;assembly=MatjesUtils"
+             mc:Ignorable="d"
+             d:DesignHeight="900" d:DesignWidth="420">
+    <!-- Step panel hosted by the shell. The DataContext is the VolumeScanViewModel provided by the shell's step list.
+         The fixed position controls are hidden: during the volume scan the piezo and both sheets follow the sawtooth -->
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+        <Style x:Key="SectionHeader" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,12,0,4"/>
+        </Style>
+        <Style x:Key="Label" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,2,8,2"/>
+        </Style>
+        <Style x:Key="Input" TargetType="TextBox">
+            <Setter Property="Width" Value="70"/>
+            <Setter Property="Margin" Value="0,2"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+        </Style>
+    </UserControl.Resources>
+    <StackPanel Margin="10">
+        <TextBlock Text="Volume scan" FontSize="16" FontWeight="SemiBold"/>
+        <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="White" Text="{Binding StatusMessage}"/>
+
+        <!-- Scan settings -->
+        <TextBlock Text="Stack" Style="{StaticResource SectionHeader}"/>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition/>
+                <RowDefinition/>
+                <RowDefinition/>
+                <RowDefinition/>
+                <RowDefinition/>
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Row="0" Text="Start (um)" Style="{StaticResource Label}"
+                       ToolTip="Piezo position at the start of the imaging (rising) flank of the sawtooth"/>
+            <TextBox Grid.Row="0" Grid.Column="1" Style="{StaticResource Input}" Text="{Binding StartMicrons}"/>
+            <TextBlock Grid.Row="1" Text="Depth (um)" Style="{StaticResource Label}"
+                       ToolTip="Commanded piezo travel during the imaging flank. The linear part, and so the saved stack, covers less than this"/>
+            <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource Input}" Text="{Binding DepthMicrons}"/>
+            <TextBlock Grid.Row="2" Text="Plane spacing (um)" Style="{StaticResource Label}"
+                       ToolTip="Requested distance between planes. Sets the frames per volume"/>
+            <TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource Input}" Text="{Binding PlaneSpacingMicrons}"/>
+            <TextBlock Grid.Row="3" Text="Volume rate (Hz)" Style="{StaticResource Label}"
+                       ToolTip="Requested volumes per second. Together with the frames per volume this sets the camera frame rate"/>
+            <TextBox Grid.Row="3" Grid.Column="1" Style="{StaticResource Input}" Text="{Binding RequestedVolumeRateHz}"/>
+            <TextBlock Grid.Row="4" Text="Test volumes" Style="{StaticResource Label}"
+                       ToolTip="Volumes analyzed by a test. One extra volume at the start is discarded while the piezo settles"/>
+            <TextBox Grid.Row="4" Grid.Column="1" Style="{StaticResource Input}" Text="{Binding TestVolumes}"/>
+        </Grid>
+        <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" ToolTip="{Binding Source={x:Static ViewModels:VolumeScanViewModel.FramesPerVolumeNote}, Mode=OneWay}">
+            <Run Text="{Binding FramesPerVolume, Mode=OneWay}"/>
+            <Run Text="frames per volume at"/>
+            <Run Text="{Binding FrameRateHz, Mode=OneWay}"/>
+            <Run Text="frames per second:"/>
+            <Run Text="{Binding VolumeRateHz, Mode=OneWay, StringFormat={}{0:F2}}"/>
+            <Run Text="volumes per second,"/>
+            <Run Text="{Binding CommandedPlaneSpacingMicrons, Mode=OneWay, StringFormat={}{0:F2}}"/>
+            <Run Text="um between frames."/>
+        </TextBlock>
+        <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" FontSize="11" Text="{Binding Source={x:Static ViewModels:VolumeScanViewModel.FramesPerVolumeNote}, Mode=OneWay}"/>
+        <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="Orange" Text="{Binding SettingsProblem}"/>
+        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+            <Button Content="Test" Padding="12,2" IsEnabled="{Binding CanTest}" Click="Test_Click"
+                    ToolTip="Starts the volume scan and measures the piezo read-back. The scan keeps running afterwards to inspect planes"/>
+            <Button Content="Stop scan" Padding="6,2" Margin="8,0,0,0" IsEnabled="{Binding IsScanning}" Click="Stop_Click"/>
+            <Button Content="Auto contrast" Padding="6,2" Margin="8,0,0,0" IsEnabled="{Binding IsScanning}" Click="AutoContrast_Click"/>
+        </StackPanel>
+        <ProgressBar Height="8" Margin="0,6,0,0" Minimum="0" Maximum="1" Value="{Binding TestProgress, Mode=OneWay}"
+                     Visibility="{Binding IsTesting, Converter={StaticResource BoolToVisibility}}"/>
+
+        <!-- Piezo read-back -->
+        <TextBlock Text="Piezo command and read-back (one volume)" Style="{StaticResource SectionHeader}"/>
+        <Utils:TracePlot Height="200" Trace1="{Binding CommandTrace}" Trace2="{Binding ReadbackTrace}"
+                         FillStart="{Binding LinearWindowStartFrames}" FillEnd="{Binding LinearWindowEndFrames}"
+                         OutlineStart="{Binding KeptStartFrames}" OutlineEnd="{Binding KeptEndFrames}"
+                         XLabel="Frame within volume" YLabel="um" EmptyText="Press Test to measure the piezo"/>
+        <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" FontSize="11"
+                   Text="Gray: command, blue: read-back, green: linear part, red lines: kept planes."/>
+
+        <StackPanel Visibility="{Binding HasValidResult, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock Margin="0,6,0,0" TextWrapping="Wrap">
+                <Run Text="Measured plane spacing:"/>
+                <Run Text="{Binding MeasuredPlaneSpacingMicrons, Mode=OneWay, StringFormat='{}{0:F2} um'}"/>
+            </TextBlock>
+
+            <!-- Planes to keep -->
+            <TextBlock Text="Planes to keep" Style="{StaticResource SectionHeader}"/>
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="From" Style="{StaticResource Label}"/>
+                <TextBox Style="{StaticResource Input}" Width="50" Text="{Binding FirstKeptPlane}"/>
+                <TextBlock Text="to" Style="{StaticResource Label}" Margin="8,2,8,2"/>
+                <TextBox Style="{StaticResource Input}" Width="50" Text="{Binding LastKeptPlane}"/>
+                <TextBlock Style="{StaticResource Label}" Margin="8,2,0,2">
+                    <Run Text="of 0 -"/>
+                    <Run Text="{Binding MaxPlane, Mode=OneWay}"/>
+                </TextBlock>
+            </StackPanel>
+            <TextBlock Margin="0,4,0,0" TextWrapping="Wrap">
+                <Run Text="{Binding NumKeptPlanes, Mode=OneWay}"/>
+                <Run Text="planes per volume covering"/>
+                <Run Text="{Binding KeptDepthMicrons, Mode=OneWay, StringFormat={}{0:F0}}"/>
+                <Run Text="um."/>
+            </TextBlock>
+            <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="Orange"
+                       Visibility="{Binding KeptPlanesOutsideLinearWindow, Converter={StaticResource BoolToVisibility}}"
+                       Text="Some kept planes are outside the linear part, so their spacing is not uniform."/>
+
+            <!-- Live plane -->
+            <TextBlock Text="Shown plane" Style="{StaticResource SectionHeader}"/>
+            <StackPanel Orientation="Horizontal">
+                <Slider Width="220" Minimum="0" Maximum="{Binding MaxPlane}" Value="{Binding DisplayPlane}" IsSnapToTickEnabled="True" TickFrequency="1"
+                        VerticalAlignment="Center" IsEnabled="{Binding IsScanning}"/>
+                <TextBlock Style="{StaticResource Label}" Margin="8,2,0,2">
+                    <Run Text="{Binding DisplayPlane, Mode=OneWay}"/>
+                    <Run Text="("/><Run Text="{Binding DisplayPlaneMicrons, Mode=OneWay, StringFormat='{}{0:F1} um'}"/><Run Text=")"/>
+                </TextBlock>
+            </StackPanel>
+
+            <Button Content="Accept volume scan" Margin="0,12,0,0" Padding="4" IsEnabled="{Binding CanAccept}" Click="Accept_Click"/>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

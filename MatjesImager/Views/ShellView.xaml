@@ -19,6 +19,9 @@
         <DataTemplate DataType="{x:Type ViewModels:ZCalibrationViewModel}">
             <local:ZCalibrationView/>
         </DataTemplate>
+        <DataTemplate DataType="{x:Type ViewModels:VolumeScanViewModel}">
+            <local:VolumeScanView/>
+        </DataTemplate>
         <DataTemplate DataType="{x:Type ViewModels:PlaceholderStepViewModel}">
             <StackPanel Margin="10">
                 <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="SemiBold"/>
@@ -102,6 +105,9 @@
                 <TextBlock Foreground="White" Text="{Binding LightSheet.Camera.FrameRate, ConverterParameter=2, Converter={StaticResource RoundDoubleConverter}, FallbackValue=-, TargetNullValue=-}"/>
                 <TextBlock Foreground="White" Text="   Frame: "/>
                 <TextBlock Foreground="White" Text="{Binding LightSheet.Camera.FrameIndex, FallbackValue=-, TargetNullValue=-}"/>
+                <TextBlock Foreground="White" Text="   Missed frames: "
+                           ToolTip="Camera triggers without a frame, estimated from the frame timestamps during volume scans. Any missed frame shifts the plane assignment"/>
+                <TextBlock Foreground="White" Text="{Binding LightSheet.Camera.MissedFrames, FallbackValue=-, TargetNullValue=-}"/>
                 <TextBlock Foreground="White" Text="   Piezo: "/>
                 <TextBlock Foreground="White" Text="{Binding LightSheet.ScanHead.Piezo_Fixed_Microns, StringFormat='{}{0:F1} um'}"/>
                 <TextBlock Foreground="Orange" Margin="20,0,0,0" Text="{Binding StatusMessage}"/>
