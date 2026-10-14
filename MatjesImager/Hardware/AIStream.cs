@@ -15,7 +15,7 @@ namespace MatjesImager.Hardware
         /// <summary>
         /// Producer consumer to make read samples available together with their absolute index
         /// </summary>
-        private readonly ProducerConsumer<Tuple<long, double>> _hardwareReads;
+        private readonly ProducerConsumer<Tuple<long, double>> _hardwareStream;
 
         /// <summary>
         /// Defines the number of samples that will be averaged to produce one sample in _hardwareReads
@@ -48,7 +48,7 @@ namespace MatjesImager.Hardware
             ArgumentOutOfRangeException.ThrowIfLessThan(buffer_size, 1);
             ArgumentOutOfRangeException.ThrowIfLessThan(samples_to_average, 1);
 
-            _hardwareReads = new ProducerConsumer<Tuple<long, double>>(buffer_size, raise_overflow);
+            _hardwareStream = new ProducerConsumer<Tuple<long, double>>(buffer_size, raise_overflow);
             _samplesToAverage = samples_to_average;
         }
 
@@ -57,11 +57,11 @@ namespace MatjesImager.Hardware
         /// <summary>
         /// Producer consumer to make read samples available together with their absolute index
         /// </summary>
-        public ProducerConsumer<Tuple<long, double>> HardwareReads
+        public ProducerConsumer<Tuple<long, double>> HardwareStream
         {
             get
             {
-                return _hardwareReads;
+                return _hardwareStream;
             }
         }
 
@@ -110,7 +110,7 @@ namespace MatjesImager.Hardware
                         }
                         // Average and put the new value together with the index onto the queue
                         value /= _samplesToAverage;
-                        _hardwareReads.Produce(new Tuple<long, double>(_globalSampleIndex++, value));
+                        _hardwareStream.Produce(new Tuple<long, double>(_globalSampleIndex++, value));
                     }
                 }
             }
