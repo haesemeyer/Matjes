@@ -90,7 +90,6 @@ namespace MatjesImager.Hardware
                 // TODO: It is not ideal that we compute sampleRate in multiple places. Ideally this should be queriable from ScanControl, which however currently only computes this value after starting!
                 int sampleRate = Settings.Default.SamplesPerFrame * frameRateHz;
                 _analogProcessor = hardware_ai_processor;
-                // TODO: We likely want to set the raise on overflow to false later since we do not want this to stop the entire program but rather have the sample consumer deal with overflows
                 HardwareRead = new AIStream(4 * sampleRate, 10, true);
                 // Start our analog in reads before starting the scan head as they wait on the same trigger as the camera
                 _analogProcessor.Start(HardwareRead.HardwareStream);
