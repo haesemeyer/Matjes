@@ -78,50 +78,95 @@ namespace MatjesImager.Hardware
             return new Microscope(designInstance: true);
         }
 
+        /// <summary>
+        /// The number of analog-in samples averaged into one read-back sample. It divides the samples per frame,
+        /// so that read-back sample n covers z samples n * HardwareReadSamplesToAverage onwards and every frame
+        /// spans a whole number of read-back samples
+        /// </summary>
+        public static int HardwareReadSamplesToAverage => Settings.Default.SamplesPerFrame % 10 == 0 ? 10 : 1;
+
+        /// <summary>
+        /// Starts the idle scan with fixed, user-set positions
+        /// </summary>
+        /// <param name="frameRateHz">The camera frame rate</param>
+        /// <param name="hardware_ai_processor">If not null, consumer of the piezo read-back during the scan</param>
         public void StartIdleScan(int frameRateHz, IAnalogProcessor<Tuple<long, double>>? hardware_ai_processor=null)
         {
-            if (IsRunning)
-                throw new InvalidOperationException("Cannot start new scan while microscope is running");
-            Camera = new CameraStream();
-            // Camera has to be armed before the scanhead starts the trigger counter
-            Camera.Start();
-            if(hardware_ai_processor != null)
-            {
-                // TODO: It is not ideal that we compute sampleRate in multiple places. Ideally this should be queriable from ScanControl, which however currently only computes this value after starting!
-                int sampleRate = Settings.Default.SamplesPerFrame * frameRateHz;
-                _analogProcessor = hardware_ai_processor;
-                HardwareRead = new AIStream(4 * sampleRate, 10, true);
-                // Start our analog in reads before starting the scan head as they wait on the same trigger as the camera
-                _analogProcessor.Start(HardwareRead.HardwareStream);
-                HardwareRead.Start(sampleRate);
-            }
-            ScanHead.StartIdleScan(frameRateHz);
-            Mode = MicroscopeMode.Preview;
+            StartScan(frameRateHz, hardware_ai_processor, null, () => ScanHead.StartIdleScan(frameRateHz), MicroscopeMode.Preview);
         }
 
-        public void StartVolumeScan(VolumeScanParams scanParams)
+        /// <summary>
+        /// Starts a volume scan. The camera tags each frame with its plane within the volume
+        /// </summary>
+        /// <param name="scanParams">The scan parameters</param>
+        /// <param name="hardware_ai_processor">If not null, consumer of the piezo read-back during the scan</param>
+        public void StartVolumeScan(VolumeScanParams scanParams, IAnalogProcessor<Tuple<long, double>>? hardware_ai_processor = null)
+        {
+            StartScan(scanParams.CameraFrameRate, hardware_ai_processor,
+                camera => camera.ConfigureVolumeScan(scanParams.FramesPerVolume, scanParams.CameraFrameRate),
+                () => ScanHead.StartZScan(scanParams), MicroscopeMode.VolumeScan);
+        }
+
+        /// <summary>
+        /// Arms the camera, starts the optional analog-in reads and then the scan head, whose counter triggers everything.
+        /// On failure all hardware that was started is stopped again
+        /// </summary>
+        private void StartScan(int frameRateHz, IAnalogProcessor<Tuple<long, double>>? hardware_ai_processor, Action<CameraStream>? configureCamera,
+            Action startScanHead, MicroscopeMode mode)
         {
             if (IsRunning)
                 throw new InvalidOperationException("Cannot start new scan while microscope is running");
-            Camera = new CameraStream();
-            // Camera has to be armed before the scanhead starts the trigger counter
-            Camera.Start();
-            ScanHead.StartZScan(scanParams);
-            Mode = MicroscopeMode.VolumeScan;
+            try
+            {
+                Camera = new CameraStream();
+                configureCamera?.Invoke(Camera);
+                // Camera has to be armed before the scanhead starts the trigger counter
+                Camera.Start();
+                if (hardware_ai_processor != null)
+                {
+                    // TODO: It is not ideal that we compute sampleRate in multiple places. Ideally this should be queriable from ScanControl, which however currently only computes this value after starting!
+                    int sampleRate = Settings.Default.SamplesPerFrame * frameRateHz;
+                    _analogProcessor = hardware_ai_processor;
+                    HardwareRead = new AIStream(4 * sampleRate, HardwareReadSamplesToAverage, true);
+                    // Start our analog in reads before starting the scan head as they wait on the same trigger as the camera
+                    _analogProcessor.Start(HardwareRead.HardwareStream);
+                    HardwareRead.Start(sampleRate);
+                }
+                startScanHead();
+            }
+            catch (Exception)
+            {
+                // Report the original failure rather than one from cleaning up after it
+                try { StopHardware(); }
+                catch (Exception) { }
+                throw;
+            }
+            Mode = mode;
         }
 
         public void Stop()
         {
             if (!IsRunning)
                 return;
+            StopHardware();
+            Mode = MicroscopeMode.Off;
+        }
+
+        /// <summary>
+        /// Stops and releases everything a scan started. Safe to call on partially started scans
+        /// </summary>
+        private void StopHardware()
+        {
             _analogProcessor?.Stop();
+            _analogProcessor = null;
             Camera?.Stop();
             HardwareRead?.Stop();
             ScanHead.Stop();
             ScanHead.SetAllAOZero();
+            HardwareRead?.Dispose();
+            HardwareRead = null;
             Camera?.Dispose();
             Camera = null;
-            Mode = MicroscopeMode.Off;
         }
 
         #region IDisposable

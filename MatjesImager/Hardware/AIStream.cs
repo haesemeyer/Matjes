@@ -38,6 +38,8 @@ namespace MatjesImager.Hardware
 
         private CancellationTokenSource? _cancellationTokenSource;
 
+        private Exception? _readError;
+
         #endregion
 
         /// <summary>
@@ -76,6 +78,21 @@ namespace MatjesImager.Hardware
             {
                 return _samplesToAverage;
             }
+        }
+
+        /// <summary>
+        /// The exception that ended the read loop early (e.g. an overflow of the hardware stream), or null.
+        /// Set while running if the loop failed, or at the latest by Stop
+        /// </summary>
+        public Exception? ReadError
+        {
+            get
+            {
+                if (_readError == null && _readTask != null && _readTask.IsFaulted)
+                    return _readTask.Exception?.InnerException;
+                return _readError;
+            }
+            private set { _readError = value; }
         }
 
         // Physcial channel names, convenience accessors
@@ -136,6 +153,7 @@ namespace MatjesImager.Hardware
             _cancellationTokenSource?.Dispose();
             _cancellationTokenSource = new CancellationTokenSource();
             _globalSampleIndex = 0;
+            _readError = null;
             // Calculate our samples to read - we aim to read 10 times per second and always read a sample number that is divisible by samples to average
             int samplesToRead = sampleRate / 10;
             samplesToRead -= samplesToRead % _samplesToAverage;
@@ -168,9 +186,14 @@ namespace MatjesImager.Hardware
             if (!_isRunning)
                 return;
             _cancellationTokenSource?.Cancel();
-            _aiTask?.Dispose();
-            _readTask?.Wait();
+            // Let the read loop leave the task alone before disposing it. A failed read loop (e.g. a queue overflow)
+            // is reported through ReadError rather than thrown, so that callers can still stop the remaining hardware
+            try { _readTask?.Wait(); }
+            catch (AggregateException ex) { ReadError = ex.InnerException ?? ex; }
             _readTask?.Dispose();
+            _readTask = null;
+            _aiTask?.Dispose();
+            _aiTask = null;
             _isRunning = false;
         }
 

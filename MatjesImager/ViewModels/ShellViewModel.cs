@@ -22,14 +22,14 @@ namespace MatjesImager.ViewModels
             Positions = new PositionsViewModel();
             Preview = new PreviewViewModel();
             ZCalibration = new ZCalibrationViewModel();
+            VolumeScan = new VolumeScanViewModel(ZCalibration);
             Steps = new ObservableCollection<StepViewModel>
             {
                 Preview,
                 new PlaceholderStepViewModel(2, "ROI", MicroscopeMode.Preview,
                     "Selecting the camera region of interest is not built yet."),
                 ZCalibration,
-                new PlaceholderStepViewModel(4, "Volume scan", null,
-                    "Setting up and testing the volume scan is not built yet."),
+                VolumeScan,
                 new PlaceholderStepViewModel(5, "Experiment", null,
                     "Running experiments is not built yet."),
             };
@@ -62,6 +62,11 @@ namespace MatjesImager.ViewModels
         /// The z-calibration step
         /// </summary>
         public ZCalibrationViewModel ZCalibration { get; }
+
+        /// <summary>
+        /// The volume scan setup step
+        /// </summary>
+        public VolumeScanViewModel VolumeScan { get; }
 
         /// <summary>
         /// The workflow steps in order
@@ -103,13 +108,16 @@ namespace MatjesImager.ViewModels
 
         /// <summary>
         /// Stops and restarts the microscope if it is not already in the requested mode.
-        /// Steps 1 to 3 all run in preview so moving between them does not touch the hardware
+        /// Steps 1 to 3 all run in preview so moving between them does not touch the hardware.
+        /// Volume scans need parameters only the step itself has, so for those the microscope is stopped and the step starts its own scan
         /// </summary>
         /// <param name="mode">The requested mode or null to leave the microscope as it is</param>
         /// <returns>True if the microscope is in the requested mode</returns>
         private bool EnterMode(MicroscopeMode? mode)
         {
-            if (IsInDesignMode || mode == null || mode == LightSheet.Mode)
+            if (IsInDesignMode || mode == null)
+                return true;
+            if (mode != MicroscopeMode.VolumeScan && mode == LightSheet.Mode)
                 return true;
             try
             {
@@ -119,11 +127,11 @@ namespace MatjesImager.ViewModels
                         Preview.StartPreview();
                         break;
                     case MicroscopeMode.Off:
+                    case MicroscopeMode.VolumeScan:
                         LightSheet.Stop();
                         break;
                     default:
                         LightSheet.Stop();
-                        // Volume scans need parameters only the step itself has, so such steps start the scan themselves
                         throw new NotSupportedException($"The shell cannot enter {mode} mode.");
                 }
                 StatusMessage = "";

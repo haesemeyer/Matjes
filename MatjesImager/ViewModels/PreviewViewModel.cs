@@ -155,8 +155,7 @@ namespace MatjesImager.ViewModels
                 _imageScaleMax = lightSheet.Camera.ImageScaleMax;
             }
             lightSheet.Stop();
-            // TODO: Remove the DebugProcessor here since it is a drain on resources and only useful for testing the AI reads
-            lightSheet.StartIdleScan(FrameRateHz, new DebugProcessor());
+            lightSheet.StartIdleScan(FrameRateHz);
             var camera = lightSheet.Camera!;
             camera.DisplayEvery = Math.Max(1, FrameRateHz / DisplayRateHz);
             camera.ImageScaleMin = _imageScaleMin;
@@ -187,7 +186,7 @@ namespace MatjesImager.ViewModels
         /// <summary>
         /// Sets the display scaling from the pixel value distribution of the latest frame
         /// </summary>
-        public unsafe void AutoContrast()
+        public void AutoContrast()
         {
             var camera = lightSheet.Camera;
             using var frame = camera?.CopyLatestRawFrame();
@@ -196,6 +195,16 @@ namespace MatjesImager.ViewModels
                 StatusMessage = "No frame received yet.";
                 return;
             }
+            var (low, high) = AutoContrastRange(frame);
+            camera.ImageScaleMin = low;
+            camera.ImageScaleMax = high;
+        }
+
+        /// <summary>
+        /// The display range that maps the given percentiles of a frame's pixel values to black and white
+        /// </summary>
+        internal static unsafe (double low, double high) AutoContrastRange(Image16 frame)
+        {
             var histogram = new long[ushort.MaxValue + 1];
             for (int y = 0; y < frame.Height; y++)
             {
@@ -209,8 +218,7 @@ namespace MatjesImager.ViewModels
             if (high - low < _minDisplayRange)
                 high = Math.Min(low + _minDisplayRange, ushort.MaxValue);
             low = Math.Min(low, high - _minDisplayRange);
-            camera.ImageScaleMin = low;
-            camera.ImageScaleMax = high;
+            return (low, high);
         }
 
         /// <summary>
