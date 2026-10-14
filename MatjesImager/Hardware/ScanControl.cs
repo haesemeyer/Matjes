@@ -223,8 +223,8 @@ namespace MatjesImager.Hardware
         /// </summary>
         public double Piezo_Fixed_Microns
         {
-            get { return _piezo_fixed_volts / Settings.Default.PiezoMaxVolts * Settings.Default.PiezoRangeMicrons; }
-            set { _piezo_fixed_volts = value / Settings.Default.PiezoRangeMicrons * Settings.Default.PiezoMaxVolts; RaisePropertyChanged(nameof(Piezo_Fixed_Microns)); }
+            get { return PiezoConfig.VoltsToMicrons(_piezo_fixed_volts); }
+            set { _piezo_fixed_volts = PiezoConfig.MicronsToVolts(value); RaisePropertyChanged(nameof(Piezo_Fixed_Microns)); }
         }
 
         /// <summary>

@@ -4,13 +4,14 @@ using System.Text;
 
 namespace MatjesImager.Hardware
 {
+    using MatjesImager.Properties;
     using System;
     using System.Diagnostics;
     using System.Threading;
+    using Thorlabs.MotionControl.Benchtop.PrecisionPiezoCLI;
     using Thorlabs.MotionControl.DeviceManagerCLI;
     using Thorlabs.MotionControl.GenericPiezoCLI;
     using Thorlabs.MotionControl.GenericPiezoCLI.Piezo;
-    using Thorlabs.MotionControl.Benchtop.PrecisionPiezoCLI;
     using Thorlabs.MotionControl.GenericPiezoCLI.Settings;
 
     public static class PiezoConfig
@@ -86,6 +87,26 @@ namespace MatjesImager.Hardware
                 Thread.Sleep(100);
             }
 
+        }
+
+        /// <summary>
+        /// Converts piezo position in microns to BNC control voltage
+        /// </summary>
+        /// <param name="microns">The position</param>
+        /// <returns>Command voltage</returns>
+        public static double MicronsToVolts(double microns)
+        {
+            return microns / Settings.Default.PiezoRangeMicrons * Settings.Default.PiezoMaxVolts;
+        }
+
+        /// <summary>
+        /// Converts BNC control voltage to piezo position in microns
+        /// </summary>
+        /// <param name="volts">Command voltage</param>
+        /// <returns>The position</returns>
+        public static double VoltsToMicrons(double volts)
+        {
+            return volts / Settings.Default.PiezoMaxVolts * Settings.Default.PiezoRangeMicrons;
         }
     }
 }
