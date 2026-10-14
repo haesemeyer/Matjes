@@ -155,7 +155,8 @@ namespace MatjesImager.ViewModels
                 _imageScaleMax = lightSheet.Camera.ImageScaleMax;
             }
             lightSheet.Stop();
-            lightSheet.StartIdleScan(FrameRateHz);
+            // TODO: Remove the DebugProcessor here since it is a drain on resources and only useful for testing the AI reads
+            lightSheet.StartIdleScan(FrameRateHz, new DebugProcessor());
             var camera = lightSheet.Camera!;
             camera.DisplayEvery = Math.Max(1, FrameRateHz / DisplayRateHz);
             camera.ImageScaleMin = _imageScaleMin;
