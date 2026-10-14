@@ -594,12 +594,12 @@ namespace MatjesImager.ViewModels
         private async void PollTimer_Tick(object? sender, EventArgs e)
         {
             var recorder = _recorder;
-            var scanParams = _runningParams;
-            if (recorder == null || scanParams == null)
+            if (recorder == null || _runningParams == null)
             {
                 _pollTimer.Stop();
                 return;
             }
+            VolumeScanParams scanParams = _runningParams.Value;
             TestProgress = (double)recorder.NumRecorded / recorder.SamplesToRecord;
             var readError = lightSheet.HardwareRead?.ReadError;
             if (readError != null || recorder.HasGap)
