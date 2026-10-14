@@ -98,14 +98,7 @@ namespace MatjesImager.Hardware
             {
                 if(_aiTask.Stream.AvailableSamplesPerChannel >= samplesToRead)
                 {
-                    reader.MemoryOptimizedReadMultiSample(samplesToRead, ref readBuffer, out samples_read);
-                    // The following should only matter when reads are externally canceled in all other cases samples_read should equal samplesToRead
-                    // which means that it should be evenly divisible by _samplesToAverage. However for these edge cases we trim to an even division and then exit
-                    if (samples_read < samplesToRead) 
-                    {
-                        incomplete_read=true;
-                        samples_read -= samples_read % _samplesToAverage;
-                    }
+                    reader.MemoryOptimizedReadMultiSample(samplesToRead, ref readBuffer, out samples_read);// NOTE: Given our if statement above, at this point samples_read==samplesToRead unless something went wrong
                     int sample_index = 0;
                     while(sample_index  < samples_read)
                     {
