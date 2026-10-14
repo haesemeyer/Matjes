@@ -21,12 +21,11 @@ namespace MatjesUtils
         /// </summary>
         public bool ThrowOnOverflow { get; protected set; }
 
-        public ProducerConsumer()
+        public ProducerConsumer(bool throw_on_overflow) : this(100, throw_on_overflow)
         {
-            MaxCount = 100;
         }
 
-        public ProducerConsumer(int maxCount)
+        public ProducerConsumer(int maxCount, bool throw_on_overflow)
         {
             MaxCount = maxCount;
         }

@@ -19,7 +19,7 @@ namespace MatjesUtils
         public AsyncTiffWriter(string fileName)
         {
             _tiffWriter = new TiffWriter(fileName);
-            _imageQueue = new ProducerConsumer<Image8>(4000);
+            _imageQueue = new ProducerConsumer<Image8>(4000, false);
             _cancellationTokenSource = new CancellationTokenSource();
             System.Threading.Tasks.Task.Run(() => TaskRun(_cancellationTokenSource.Token));
         }

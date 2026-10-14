@@ -43,12 +43,12 @@ namespace MatjesImager.Hardware
         /// </summary>
         /// <param name="buffer_size">The size of the transfer buffer (has to be at least 1)</param>
         /// <param name="samples_to_average">The number of samples to average on each read (has to be at least 1)</param>
-        public AIStream(int buffer_size, int samples_to_average)
+        public AIStream(int buffer_size, int samples_to_average, bool raise_overflow=false)
         {
             ArgumentOutOfRangeException.ThrowIfLessThan(buffer_size, 1);
             ArgumentOutOfRangeException.ThrowIfLessThan(samples_to_average, 1);
 
-            _hardwareReads = new ProducerConsumer<Tuple<long, double>>(buffer_size);
+            _hardwareReads = new ProducerConsumer<Tuple<long, double>>(buffer_size, raise_overflow);
             _samplesToAverage = samples_to_average;
         }
 
