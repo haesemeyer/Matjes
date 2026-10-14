@@ -29,6 +29,8 @@ namespace MatjesImager.Hardware
 
         private bool _isRunning = false;
 
+        private System.Threading.Tasks.Task? _readTask;
+
         /// <summary>
         /// Task for analog-in reads
         /// </summary>
@@ -151,7 +153,9 @@ namespace MatjesImager.Hardware
             // Start our task which will wait on the trigger
             _aiTask.Start();
             // Start the read method
-            System.Threading.Tasks.Task.Run(() => ReadLoop(_cancellationTokenSource.Token, samplesToRead));
+            _readTask = new System.Threading.Tasks.Task(() => ReadLoop(_cancellationTokenSource.Token, samplesToRead));
+            _readTask.Start();
+            //System.Threading.Tasks.Task.Run(() => ReadLoop(_cancellationTokenSource.Token, samplesToRead));
             _isRunning = true;
         }
 
@@ -164,6 +168,8 @@ namespace MatjesImager.Hardware
                 return;
             _cancellationTokenSource?.Cancel();
             _aiTask?.Dispose();
+            _readTask?.Wait();
+            _readTask?.Dispose();
             _isRunning = false;
         }
 
@@ -182,6 +188,7 @@ namespace MatjesImager.Hardware
                     _cancellationTokenSource?.Cancel();
                     _aiTask?.Dispose();
                     _cancellationTokenSource?.Dispose();
+                    _readTask?.Dispose();
                 }
 
                 disposedValue = true;

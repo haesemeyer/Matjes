@@ -10,6 +10,8 @@ namespace MatjesUtils
         private bool _isRunning = false;
         private CancellationTokenSource? _cancellationTokenSource;
 
+        private System.Threading.Tasks.Task? _writeTask;
+
         private void ProcessLoop(CancellationToken token, ProducerConsumer<Tuple<long, double>> queue)
         {
             while (!token.IsCancellationRequested)
@@ -23,7 +25,7 @@ namespace MatjesUtils
                 {
                     break;
                 }
-                System.Diagnostics.Debug.WriteLine($"Sample: {read_value.Item1}; Value: {read_value.Item2}.");
+                System.Diagnostics.Debug.WriteLineIf(read_value.Item1 % 1000 == 0, $"Sample: {read_value.Item1}; Value: {read_value.Item2}.");
             }
         }
 
@@ -33,7 +35,8 @@ namespace MatjesUtils
                 throw new InvalidOperationException("Invoked Start while Processor is running");
             _cancellationTokenSource?.Dispose();
             _cancellationTokenSource = new CancellationTokenSource();
-            System.Threading.Tasks.Task.Run(() => ProcessLoop(_cancellationTokenSource.Token, queue));
+            _writeTask = new System.Threading.Tasks.Task(() => ProcessLoop(_cancellationTokenSource.Token, queue));
+            _writeTask.Start();
         }
 
         public void Stop()
@@ -41,6 +44,8 @@ namespace MatjesUtils
             if (_isRunning)
                 return;
             _cancellationTokenSource?.Cancel();
+            _writeTask?.Wait();
+            _writeTask?.Dispose();
         }
 
         public void Dispose()

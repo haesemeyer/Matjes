@@ -1,4 +1,5 @@
-﻿using MatjesUtils;
+﻿using MatjesImager.Properties;
+using MatjesUtils;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -16,6 +17,10 @@ namespace MatjesImager.Hardware
 
         private CameraStream? _camera;
 
+        private AIStream? _hardwareRead;
+
+        private IAnalogProcessor<Tuple<long, double>>? _analogProcessor;
+
         public ScanControl ScanHead { get; private set; }
 
         /// <summary>
@@ -25,6 +30,15 @@ namespace MatjesImager.Hardware
         {
             get { return _camera; }
             private set { _camera = value; RaisePropertyChanged(nameof(Camera)); }
+        }
+
+        /// <summary>
+        /// If requested the analog in reader for hardware readback
+        /// </summary>
+        public AIStream? HardwareRead
+        {
+            get { return _hardwareRead; }
+            private set { _hardwareRead = value; RaisePropertyChanged(nameof(HardwareRead));  }
         }
 
         /// <summary>
@@ -64,13 +78,24 @@ namespace MatjesImager.Hardware
             return new Microscope(designInstance: true);
         }
 
-        public void StartIdleScan(int frameRateHz)
+        public void StartIdleScan(int frameRateHz, IAnalogProcessor<Tuple<long, double>>? hardware_ai_processor=null)
         {
             if (IsRunning)
                 throw new InvalidOperationException("Cannot start new scan while microscope is running");
             Camera = new CameraStream();
             // Camera has to be armed before the scanhead starts the trigger counter
             Camera.Start();
+            if(hardware_ai_processor != null)
+            {
+                // TODO: It is not ideal that we compute sampleRate in multiple places. Ideally this should be queriable from ScanControl, which however currently only computes this value after starting!
+                int sampleRate = Settings.Default.SamplesPerFrame * frameRateHz;
+                _analogProcessor = hardware_ai_processor;
+                // TODO: We likely want to set the raise on overflow to false later since we do not want this to stop the entire program but rather have the sample consumer deal with overflows
+                HardwareRead = new AIStream(4 * sampleRate, 10, true);
+                // Start our analog in reads before starting the scan head as they wait on the same trigger as the camera
+                _analogProcessor.Start(HardwareRead.HardwareStream);
+                HardwareRead.Start(sampleRate);
+            }
             ScanHead.StartIdleScan(frameRateHz);
             Mode = MicroscopeMode.Preview;
         }
@@ -90,7 +115,9 @@ namespace MatjesImager.Hardware
         {
             if (!IsRunning)
                 return;
+            _analogProcessor?.Stop();
             Camera?.Stop();
+            HardwareRead?.Stop();
             ScanHead.Stop();
             ScanHead.SetAllAOZero();
             Camera?.Dispose();
