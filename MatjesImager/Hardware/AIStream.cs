@@ -121,10 +121,15 @@ namespace MatjesImager.Hardware
 
         #region Methods
 
+        /// <summary>
+        /// Start AI reading
+        /// </summary>
+        /// <param name="sampleRate">The sample rate at which to read from analog in</param>
+        /// <exception cref="InvalidOperationException">Raised if calling start while running</exception>
         public void Start(int sampleRate)
         {
             if (_isRunning)
-                throw new InvalidOperationException("Invoked StartIdleScan while ScanControl is running");
+                throw new InvalidOperationException("Invoked Start while AIStream is running");
             _cancellationTokenSource?.Dispose();
             _cancellationTokenSource = new CancellationTokenSource();
             _globalSampleIndex = 0;
@@ -150,6 +155,9 @@ namespace MatjesImager.Hardware
             _isRunning = true;
         }
 
+        /// <summary>
+        /// Stop AI reading
+        /// </summary>
         public void Stop()
         {
             if (!_isRunning)
