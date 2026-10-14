@@ -318,6 +318,7 @@ namespace MatjesImager.Hardware
             {
                 if (token.IsCancellationRequested)
                     throw new OperationCanceledException();
+                System.Threading.Thread.Sleep(1);
             }
         }
 

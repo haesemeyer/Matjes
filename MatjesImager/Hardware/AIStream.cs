@@ -115,6 +115,7 @@ namespace MatjesImager.Hardware
                         _hardwareStream.Produce(new Tuple<long, double>(_globalSampleIndex++, value));
                     }
                 }
+                System.Threading.Thread.Sleep(1);
             }
         }
 
