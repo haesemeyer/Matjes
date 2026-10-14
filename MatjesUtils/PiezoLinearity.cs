@@ -199,6 +199,10 @@ namespace MatjesUtils
 
             string message = $"{lastPlane - firstPlane + 1} of {framesPerVolume} frames per volume are inside the linear window " +
                 $"(analyzed {cyclesUsed} volumes). Between volumes, planes vary by {jitter:F2} um RMS ({jitter / spacing:P0} of the plane spacing).";
+            // The averaged positions keep jitter / sqrt(volumes) of noise. If that is a sizable part of the tolerance,
+            // noise rather than the piezo's curvature may end the window
+            if (jitter / Math.Sqrt(cyclesUsed) > tol / 3)
+                message += " The averaged plane positions are still noisy, so the window may be cut short: test with more volumes.";
             return new PiezoLinearityResult
             {
                 IsValid = true,
