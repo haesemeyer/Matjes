@@ -26,23 +26,24 @@ namespace MatjesUtils
         public int CyclesAnalyzed { get; init; }
 
         /// <summary>
-        /// The number of cycles in which the linear window reached the edge of the search range,
-        /// i.e. the reported window is a safe underestimate on those cycles
+        /// Root mean square deviation, in microns, of the individual volumes' plane positions from their cycle average,
+        /// over the planes inside the linear window. Captures volume-to-volume jitter such as small oscillations of the
+        /// piezo, which the window itself is not based on
         /// </summary>
-        public int CyclesBoundaryLimited { get; init; }
+        public double PlaneJitterMicrons { get; init; }
 
         /// <summary>
-        /// Start of the linear window common to all cycles, in samples from volume start
+        /// Start of the linear window, in samples from volume start (always a frame boundary)
         /// </summary>
         public int WindowStartSample { get; init; }
 
         /// <summary>
-        /// End (inclusive) of the linear window common to all cycles, in samples from volume start
+        /// End (inclusive) of the linear window, in samples from volume start (always the last sample of a frame)
         /// </summary>
         public int WindowEndSample { get; init; }
 
         /// <summary>
-        /// The steady-state piezo velocity on the imaging flank in microns per sample (median across cycles)
+        /// The steady-state piezo velocity on the imaging flank in microns per sample
         /// </summary>
         public double VelocityMicronsPerSample { get; init; }
 
@@ -79,32 +80,31 @@ namespace MatjesUtils
     }
 
     /// <summary>
-    /// Finds the part of each piezo sawtooth cycle in which the piezo moves at constant velocity, from the
-    /// position read-back recorded during a volume scan. Port of the analysis in the NI DAQmx sawtooth test script
-    /// (analyze_linear_window / find_linear_window / count_usable_frames) adapted to the imaging flank used by
-    /// ScanControl, which is the rising flank of the sawtooth.
-    /// The piezo low-pass filters its command, so its read-back is curved after each direction reversal and only
-    /// straight in between. Only frames exposed during the straight part have a uniform z-step.
+    /// Finds the frames of a piezo sawtooth volume whose read-back positions lie on an evenly spaced grid, from the position
+    /// read-back recorded during a volume scan. The imaging flank used by ScanControl is the rising flank of the sawtooth.
+    /// The piezo low-pass filters its command, so its read-back is curved after each direction reversal and only straight
+    /// in between. Only frames exposed during the straight part have a uniform z-step.
+    /// Linearity is judged on plane positions, not on velocity: each frame's position is the read-back averaged over its
+    /// exposure and over all analyzed volumes, a line is fitted to the frames in the center of the flank, and the window
+    /// grows outward from the center while frames stay within a tolerance (a fraction of the plane spacing) of that line.
+    /// A velocity criterion fails when the piezo carries a load such as an objective, which makes it oscillate slightly
+    /// around the straight path: the local velocity then swings by as much as its mean while the positions, which are what
+    /// imaging depends on, deviate by a tiny fraction of a plane. Averaging over volumes removes such oscillations when they
+    /// are not locked to the sawtooth; how much they move individual volumes is reported separately as PlaneJitterMicrons.
     /// All indices are in read-back samples. Sample n of the read-back has to be aligned with sample n of the command,
     /// which holds when both are triggered by the same counter edge and clocked at the same rate.
     /// </summary>
     public static class PiezoLinearity
     {
         /// <summary>
-        /// Maximum relative deviation from the reference velocity still counted as linear (0.05 = 5%)
+        /// Maximum deviation of a plane from the fitted evenly spaced grid, as a fraction of the plane spacing (0.1 = 10%)
         /// </summary>
-        public const double DefaultVelocityTolerance = 0.05;
+        public const double DefaultPositionTolerance = 0.1;
 
         /// <summary>
-        /// Central fraction of the command's imaging flank used to estimate the reference (steady-state) velocity
+        /// Central fraction of the command's imaging flank used to fit the reference line
         /// </summary>
         public const double CenterFraction = 0.5;
-
-        /// <summary>
-        /// The search window around each imaging flank is widened by this fraction of the volume period on each side
-        /// (clipped to the neighboring flanks) so that the search can find where linearity breaks down
-        /// </summary>
-        public const double PadFraction = 0.3;
 
         /// <summary>
         /// Analyzes the piezo read-back of a volume scan
@@ -115,11 +115,9 @@ namespace MatjesUtils
         /// <param name="samplesPerFrame">The number of samples in one camera frame. Has to divide samplesPerVolume</param>
         /// <param name="sawtoothShape">Fraction of the period spent on the rising (imaging) flank</param>
         /// <param name="skipCycles">The number of initial cycles to ignore while the piezo settles into periodic motion</param>
-        /// <param name="velocityTolerance">Relative velocity deviation still counted as linear</param>
-        /// <param name="smoothSamples">Samples of the local fit used to estimate velocity from the noisy read-back.
-        /// Defaults to one frame, which keeps the velocity estimate stable while each frame averages the position over its exposure anyway</param>
+        /// <param name="positionTolerance">Maximum deviation of a plane from the fitted grid as a fraction of the plane spacing</param>
         public static PiezoLinearityResult Analyze(double[] commandMicrons, double[] readbackMicrons, int samplesPerVolume, int samplesPerFrame,
-            double sawtoothShape, int skipCycles = 1, double velocityTolerance = DefaultVelocityTolerance, int? smoothSamples = null)
+            double sawtoothShape, int skipCycles = 1, double positionTolerance = DefaultPositionTolerance)
         {
             ArgumentNullException.ThrowIfNull(commandMicrons);
             ArgumentNullException.ThrowIfNull(readbackMicrons);
@@ -132,48 +130,19 @@ namespace MatjesUtils
             if (sawtoothShape <= 0 || sawtoothShape > 1)
                 throw new ArgumentOutOfRangeException(nameof(sawtoothShape), "Sawtooth shape has to be in (0, 1].");
             ArgumentOutOfRangeException.ThrowIfNegative(skipCycles);
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(positionTolerance);
 
-            int smooth = Math.Max(5, smoothSamples ?? samplesPerFrame) | 1;
             int period = samplesPerVolume;
             int framesPerVolume = samplesPerVolume / samplesPerFrame;
             int numCycles = readbackMicrons.Length / period;
-            int riseSamples = (int)Math.Round(sawtoothShape * period);
-            int pad = (int)Math.Round(PadFraction * period);
+            // Frames whose whole exposure lies on the command's imaging flank
+            int flankFrames = (int)Math.Round(sawtoothShape * period) / samplesPerFrame;
             if (numCycles - skipCycles < 1)
                 return Failed($"Recorded {numCycles} volume(s), at least {skipCycles + 1} are needed.");
-            if (riseSamples < 5)
-                return Failed("The imaging flank is too short to analyze.");
+            if (flankFrames < 3)
+                return Failed("The imaging flank is shorter than three frames, too short to analyze.");
 
-            var onsets = new List<int>();
-            var offsets = new List<int>();
-            var velocities = new List<double>();
-            int boundaryLimited = 0;
-            for (int c = skipCycles; c < numCycles; c++)
-            {
-                int flankStart = c * period;
-                int flankEnd = flankStart + riseSamples; // exclusive
-                // Pad the search window but never cross into the neighboring imaging flanks or past the data
-                int lo = Math.Max(Math.Max(0, flankStart - period + riseSamples), flankStart - pad);
-                int hi = Math.Min(Math.Min(readbackMicrons.Length, flankStart + period), flankEnd + pad); // exclusive
-                var window = FindLinearWindow(readbackMicrons, lo, hi, flankStart, flankEnd, velocityTolerance, smooth);
-                if (window == null)
-                    continue;
-                var (start, end, vRef, limited) = window.Value;
-                if (limited)
-                    boundaryLimited++;
-                onsets.Add(start - flankStart);
-                offsets.Add(end - flankStart);
-                velocities.Add(vRef);
-            }
-            if (onsets.Count == 0)
-                return Failed("No cycle could be analyzed.");
-
-            double velocity = Median(velocities.ToArray());
-            // Latest onset and earliest offset is safe on every cycle. Frames only exist within the volume
-            int windowStart = Math.Max(0, onsets.Max());
-            int windowEnd = Math.Min(period - 1, offsets.Min());
-
-            // Cycle averages for display and per-frame read-back positions
+            // Cycle averages for display
             int cyclesUsed = numCycles - skipCycles;
             var avgCommand = new double[period];
             var avgReadback = new double[period];
@@ -185,40 +154,60 @@ namespace MatjesUtils
                     avgReadback[i] += readbackMicrons[c * period + i] / cyclesUsed;
                 }
             }
+            // Plane positions: read-back averaged over each frame's exposure, per cycle and across cycles
+            var cyclePlanes = new double[cyclesUsed, framesPerVolume];
             var planePositions = new double[framesPerVolume];
-            for (int f = 0; f < framesPerVolume; f++)
+            for (int c = 0; c < cyclesUsed; c++)
             {
-                double sum = 0;
-                for (int i = f * samplesPerFrame; i < (f + 1) * samplesPerFrame; i++)
-                    sum += avgReadback[i];
-                planePositions[f] = sum / samplesPerFrame;
+                int offset = (c + skipCycles) * period;
+                for (int f = 0; f < framesPerVolume; f++)
+                {
+                    double sum = 0;
+                    for (int i = f * samplesPerFrame; i < (f + 1) * samplesPerFrame; i++)
+                        sum += readbackMicrons[offset + i];
+                    cyclePlanes[c, f] = sum / samplesPerFrame;
+                    planePositions[f] += cyclePlanes[c, f] / cyclesUsed;
+                }
             }
 
-            if (velocity <= 0)
+            // Reference grid: line through the frames in the center of the flank, which are well away from either reversal
+            int c0 = (int)(flankFrames * (0.5 - CenterFraction / 2));
+            int c1 = Math.Min(flankFrames, Math.Max(c0 + 2, (int)Math.Ceiling(flankFrames * (0.5 + CenterFraction / 2)))); // exclusive
+            var (intercept, spacing) = FitLine(planePositions, c0, c1);
+            if (spacing <= 0)
                 return Failed("The piezo read-back does not increase during the imaging flank. Check the read-back wiring and the piezo controller.",
                     cyclesUsed, avgCommand, avgReadback, planePositions);
-            if (windowEnd <= windowStart)
-                return Failed("The linear windows of the individual cycles do not overlap.", cyclesUsed, avgCommand, avgReadback, planePositions);
 
-            // A frame is usable if its whole exposure lies inside the common window
-            int firstPlane = (windowStart + samplesPerFrame - 1) / samplesPerFrame;
-            int lastPlane = (windowEnd + 1) / samplesPerFrame - 1;
-            if (lastPlane < firstPlane)
-                return Failed("The linear window is shorter than one frame.", cyclesUsed, avgCommand, avgReadback, planePositions);
+            // Grow the window from the center while planes stay on the grid
+            double tol = positionTolerance * spacing;
+            bool OnGrid(int f) => Math.Abs(planePositions[f] - (intercept + spacing * f)) <= tol;
+            int center = (c0 + c1 - 1) / 2;
+            if (!OnGrid(center))
+                return Failed("The plane positions in the center of the imaging flank do not lie on a line.", cyclesUsed, avgCommand, avgReadback, planePositions);
+            int firstPlane = center, lastPlane = center;
+            while (firstPlane > 0 && OnGrid(firstPlane - 1))
+                firstPlane--;
+            while (lastPlane < framesPerVolume - 1 && OnGrid(lastPlane + 1))
+                lastPlane++;
+
+            // Volume-to-volume jitter of the planes inside the window
+            double sumSq = 0;
+            for (int c = 0; c < cyclesUsed; c++)
+                for (int f = firstPlane; f <= lastPlane; f++)
+                    sumSq += Math.Pow(cyclePlanes[c, f] - planePositions[f], 2);
+            double jitter = Math.Sqrt(sumSq / (cyclesUsed * (lastPlane - firstPlane + 1)));
 
             string message = $"{lastPlane - firstPlane + 1} of {framesPerVolume} frames per volume are inside the linear window " +
-                $"(analyzed {onsets.Count} volumes).";
-            if (boundaryLimited > 0)
-                message += $" On {boundaryLimited} volume(s) the window reached the edge of the search range, so it may be wider than reported.";
+                $"(analyzed {cyclesUsed} volumes). Between volumes, planes vary by {jitter:F2} um RMS ({jitter / spacing:P0} of the plane spacing).";
             return new PiezoLinearityResult
             {
                 IsValid = true,
                 Message = message,
-                CyclesAnalyzed = onsets.Count,
-                CyclesBoundaryLimited = boundaryLimited,
-                WindowStartSample = windowStart,
-                WindowEndSample = windowEnd,
-                VelocityMicronsPerSample = velocity,
+                CyclesAnalyzed = cyclesUsed,
+                PlaneJitterMicrons = jitter,
+                WindowStartSample = firstPlane * samplesPerFrame,
+                WindowEndSample = (lastPlane + 1) * samplesPerFrame - 1,
+                VelocityMicronsPerSample = spacing / samplesPerFrame,
                 FirstLinearPlane = firstPlane,
                 LastLinearPlane = lastPlane,
                 PlanePositionsMicrons = planePositions,
@@ -228,79 +217,26 @@ namespace MatjesUtils
         }
 
         /// <summary>
-        /// Within the search range [lo, hi) of one cycle, finds the contiguous window around the center of the command's
-        /// imaging flank [flankStart, flankEnd) over which the velocity stays within tolerance of the reference velocity.
-        /// The reference velocity is estimated from the central part of the command's own flank only, so that the padding
-        /// never biases it
+        /// Least squares line through values[lo..hi) against their index
         /// </summary>
-        /// <returns>Start and end (both inclusive, absolute sample indices) of the window, the reference velocity and whether the
-        /// window ran into the edge of the search range, or null if the range is too short</returns>
-        private static (int start, int end, double vRef, bool boundaryLimited)? FindLinearWindow(double[] y, int lo, int hi, int flankStart, int flankEnd,
-            double tolerance, int smoothSamples)
+        /// <returns>Intercept (value at index 0) and slope per index</returns>
+        private static (double intercept, double slope) FitLine(double[] values, int lo, int hi)
         {
             int n = hi - lo;
-            if (n < 5 || flankEnd <= flankStart)
-                return null;
-            var velocity = LocalSlope(y, lo, hi, smoothSamples);
-
-            int flankLength = flankEnd - flankStart;
-            int c0 = flankStart + Math.Max(0, (int)(flankLength * (0.5 - CenterFraction / 2)));
-            int c1 = flankStart + Math.Min(flankLength, (int)(flankLength * (0.5 + CenterFraction / 2)));
-            if (c1 <= c0)
-                c1 = c0 + 1;
-            var central = new double[c1 - c0];
-            Array.Copy(velocity, c0 - lo, central, 0, central.Length);
-            double vRef = Median(central);
-            double tol = Math.Abs(vRef) * tolerance;
-
-            int center = (flankStart + flankEnd) / 2 - lo;
-            int wLo = center, wHi = center;
-            while (wLo > 0 && Math.Abs(velocity[wLo - 1] - vRef) <= tol)
-                wLo--;
-            while (wHi < n - 1 && Math.Abs(velocity[wHi + 1] - vRef) <= tol)
-                wHi++;
-            bool limited = wLo == 0 || wHi == n - 1;
-            return (wLo + lo, wHi + lo, vRef, limited);
-        }
-
-        /// <summary>
-        /// Velocity (per sample) of y[lo..hi) as the slope of a least squares line through a centered window of
-        /// smoothSamples samples (shrunk at the edges). Fitting the position before differentiating avoids amplifying
-        /// sample-to-sample noise. This is the first derivative of a Savitzky-Golay filter of order 1 (identical to order 2)
-        /// </summary>
-        internal static double[] LocalSlope(double[] y, int lo, int hi, int smoothSamples)
-        {
-            int n = hi - lo;
-            int half = Math.Max(2, smoothSamples / 2);
-            var slope = new double[n];
-            for (int i = 0; i < n; i++)
+            double xMean = (lo + hi - 1) / 2.0;
+            double yMean = 0;
+            for (int i = lo; i < hi; i++)
+                yMean += values[i];
+            yMean /= n;
+            double sxy = 0, sxx = 0;
+            for (int i = lo; i < hi; i++)
             {
-                int a = Math.Max(0, i - half);
-                int b = Math.Min(n - 1, i + half);
-                int m = b - a + 1;
-                double xMean = (a + b) / 2.0;
-                double yMean = 0;
-                for (int j = a; j <= b; j++)
-                    yMean += y[lo + j];
-                yMean /= m;
-                double sxy = 0, sxx = 0;
-                for (int j = a; j <= b; j++)
-                {
-                    double dx = j - xMean;
-                    sxy += dx * (y[lo + j] - yMean);
-                    sxx += dx * dx;
-                }
-                slope[i] = sxx > 0 ? sxy / sxx : 0;
+                double dx = i - xMean;
+                sxy += dx * (values[i] - yMean);
+                sxx += dx * dx;
             }
-            return slope;
-        }
-
-        private static double Median(double[] values)
-        {
-            var sorted = (double[])values.Clone();
-            Array.Sort(sorted);
-            int mid = sorted.Length / 2;
-            return sorted.Length % 2 == 1 ? sorted[mid] : 0.5 * (sorted[mid - 1] + sorted[mid]);
+            double slope = sxy / sxx;
+            return (yMean - slope * xMean, slope);
         }
 
         private static PiezoLinearityResult Failed(string message, int cycles = 0, double[]? command = null, double[]? readback = null, double[]? planes = null)

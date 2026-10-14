@@ -14,7 +14,7 @@ namespace MatjesImager.ViewModels
     /// Workflow step 4: sets up the volume scan and tests it. The user sets the stack range, the plane spacing and the volume rate,
     /// from which the frames per volume and the camera frame rate follow (the preview frame rate does not carry over).
     /// A test runs the volume scan while recording the piezo read-back, finds the part of the sawtooth in which the piezo
-    /// moves at constant velocity and proposes the frames (planes) within each volume to keep. The scan keeps running after the
+    /// moves at constant velocity (planes evenly spaced) and proposes the frames (planes) within each volume to keep. The scan keeps running after the
     /// test so that individual planes can be inspected. Accepting stores the configuration for the experiment step
     /// </summary>
     public class VolumeScanViewModel : StepViewModel
@@ -316,7 +316,7 @@ namespace MatjesImager.ViewModels
         public bool HasValidResult => Result?.IsValid == true;
 
         /// <summary>
-        /// The plane spacing measured from the read-back velocity, NaN without a result
+        /// The plane spacing measured from the read-back (slope of the fitted plane grid), NaN without a result
         /// </summary>
         public double MeasuredPlaneSpacingMicrons => HasValidResult && _testedParams != null
             ? Result!.VelocityMicronsPerSample * ReadbackSamplesPerFrame : double.NaN;
